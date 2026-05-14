@@ -1,13 +1,14 @@
 import os
 import re
-import json
 import time
 import requests
 
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 BASE_URL = "https://www.atrbpn.go.id"
+BERITA_URL = "https://www.atrbpn.go.id/berita"
 
 OUTPUT_DIR = "docs/posts"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -17,8 +18,25 @@ HEADERS = {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/124.0.0.0 Safari/537.36"
-    )
+    ),
+    "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
+    "Accept": "text/html,application/xhtml+xml",
+    "Connection": "keep-alive"
 }
+
+# session retry
+session = requests.Session()
+
+retry = Retry(
+    total=5,
+    backoff_factor=2,
+    status_forcelist=[403, 429, 500, 502, 503, 504]
+)
+
+adapter = HTTPAdapter(max_retries=retry)
+
+session.mount("http://", adapter)
+session.mount("https://", adapter)
 
 
 def slugify(text):
@@ -27,95 +45,83 @@ def slugify(text):
     return text.strip('-')
 
 
-def clean_html(html):
-    soup = BeautifulSoup(html, "html.parser")
-    return soup.get_text("\n", strip=True)
+print("Mengambil halaman berita...")
 
+try:
 
-print("Menjalankan browser...")
-
-with sync_playwright() as p:
-
-    browser = p.chromium.launch(headless=True)
-
-    page = browser.new_page()
-
-    print("Buka homepage...")
-    page.goto(BASE_URL, wait_until="domcontentloaded")
-
-    time.sleep(5)
-
-    print("Buka halaman berita...")
-    page.goto(
-        "https://www.atrbpn.go.id/berita",
-        wait_until="domcontentloaded"
+    res = session.get(
+        BERITA_URL,
+        headers=HEADERS,
+        timeout=60
     )
 
-    time.sleep(8)
+    print("STATUS:", res.status_code)
 
-    html = page.content()
+    if res.status_code != 200:
+        raise Exception("Gagal buka halaman berita")
 
-    browser.close()
+except Exception as e:
+    raise Exception(f"Gagal koneksi: {str(e)}")
 
-print("Parsing halaman berita...")
-
-soup = BeautifulSoup(html, "html.parser")
+soup = BeautifulSoup(res.text, "html.parser")
 
 links = soup.find_all("a", href=True)
 
-berita_list = []
+berita = []
 
 for a in links:
 
     href = a["href"]
 
-    if "/berita/" in href:
+    if "/berita/" not in href:
+        continue
 
-        title = a.get_text(strip=True)
+    title = a.get_text(strip=True)
 
-        if len(title) < 10:
-            continue
+    if len(title) < 15:
+        continue
 
-        url = href
+    url = href
 
-        if not url.startswith("http"):
-            url = BASE_URL + href
+    if not url.startswith("http"):
+        url = BASE_URL + href
 
-        berita_list.append({
-            "title": title,
-            "url": url
-        })
+    berita.append({
+        "title": title,
+        "url": url
+    })
 
 # hapus duplikat
-unique = []
+seen = set()
+final_berita = []
 
-used = set()
+for item in berita:
 
-for item in berita_list:
+    if item["url"] not in seen:
+        seen.add(item["url"])
+        final_berita.append(item)
 
-    if item["url"] not in used:
+berita = final_berita[:12]
 
-        used.add(item["url"])
-        unique.append(item)
+print("TOTAL:", len(berita))
 
-berita_list = unique[:12]
-
-print("TOTAL:", len(berita_list))
-
-for berita in berita_list:
+for item in berita:
 
     try:
 
         print("=" * 60)
-        print("SCRAPE:", berita["title"])
+        print("SCRAPE:", item["title"])
 
-        url = berita["url"]
+        res = session.get(
+            item["url"],
+            headers=HEADERS,
+            timeout=60
+        )
 
-        res = requests.get(url, headers=HEADERS, timeout=30)
+        print("DETAIL STATUS:", res.status_code)
 
         soup = BeautifulSoup(res.text, "html.parser")
 
-        # ambil semua paragraf
         paragraphs = soup.find_all("p")
 
         isi_list = []
@@ -132,20 +138,20 @@ for berita in berita_list:
         if not isi:
             isi = "Isi artikel gagal diambil."
 
-        slug = slugify(berita["title"])
+        slug = slugify(item["title"])
 
         markdown = f"""---
-title: "{berita['title']}"
+title: "{item['title']}"
 date: "{time.strftime('%Y-%m-%d')}"
 ---
 
-# {berita['title']}
+# {item['title']}
 
 {isi}
 
 Sumber resmi:
 
-{url}
+{item['url']}
 """
 
         filepath = f"{OUTPUT_DIR}/{slug}.md"
