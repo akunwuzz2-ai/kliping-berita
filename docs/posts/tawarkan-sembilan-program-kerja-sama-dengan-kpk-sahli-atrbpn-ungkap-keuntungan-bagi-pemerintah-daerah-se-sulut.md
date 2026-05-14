@@ -5,4 +5,10 @@ date: 2026-05-12
 
 # Tawarkan Sembilan Program Kerja Sama dengan KPK, Sahli ATR/BPN Ungkap Keuntungan bagi Pemerintah Daerah Se-Sulut
 
-[Baca Artikel Resmi](https://www.atrbpn.go.id/berita/tawarkan-sembilan-program-kerja-sama-dengan-kpk-sahli-atrbpn-ungkap-keuntungan-bagi-pemerintah-daerah-se-sulut)
+
+
+---
+
+Sumber resmi:
+
+https://www.atrbpn.go.id/berita/tawarkan-sembilan-program-kerja-sama-dengan-kpk-sahli-atrbpn-ungkap-keuntungan-bagi-pemerintah-daerah-se-sulut
