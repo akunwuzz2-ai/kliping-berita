@@ -1,7 +1,7 @@
 import os
 import re
+import json
 import time
-import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
@@ -26,19 +26,17 @@ API_URL = (
 # PLAYWRIGHT
 # ======================================================
 
-print("Menjalankan browser...")
-
 with sync_playwright() as p:
 
-    browser = p.chromium.launch(headless=True)
-
-    context = browser.new_context(
-        user_agent=(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        )
+    browser = p.chromium.launch(
+        headless=True,
+        args=[
+            "--no-sandbox",
+            "--disable-dev-shm-usage"
+        ]
     )
+
+    context = browser.new_context()
 
     page = context.new_page()
 
@@ -57,55 +55,24 @@ with sync_playwright() as p:
     time.sleep(10)
 
     # ==================================================
-    # AMBIL COOKIES
+    # AMBIL API BERITA
     # ==================================================
 
-    cookies = context.cookies()
+    print("Mengambil API berita...")
 
-    cookie_string = "; ".join(
-        [f"{c['name']}={c['value']}" for c in cookies]
-    )
+    api_page = context.new_page()
 
-    print("COOKIE DIDAPAT")
-
-    # ==================================================
-    # REQUEST SESSION
-    # ==================================================
-
-    session = requests.Session()
-
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        ),
-        "Accept": "application/json, text/plain, */*",
-        "Referer": "https://www.atrbpn.go.id/berita",
-        "Origin": "https://www.atrbpn.go.id",
-        "Cookie": cookie_string
-    }
-
-    # ==================================================
-    # GET LIST BERITA
-    # ==================================================
-
-    print("Mengambil berita API...")
-
-    res = session.get(
+    api_page.goto(
         API_URL,
-        headers=headers,
-        timeout=120
+        wait_until="networkidle",
+        timeout=120000
     )
 
-    print("STATUS:", res.status_code)
+    body = api_page.locator("body").inner_text()
 
-    if res.status_code != 200:
-        raise Exception("Gagal ambil API")
+    data_json = json.loads(body)
 
-    json_data = res.json()
-
-    data = json_data.get("data", [])
+    data = data_json.get("data", [])
 
     print("TOTAL:", len(data))
 
@@ -123,7 +90,6 @@ with sync_playwright() as p:
         date = item.get("date_created", "")[:10]
 
         print("SCRAPE:", title)
-        print("ID:", berita_id)
 
         # ==============================================
         # API KONTEN
@@ -135,42 +101,43 @@ with sync_playwright() as p:
             "&fields=components.id,components.code,content,setting,order"
         )
 
-        component_res = session.get(
+        content_page = context.new_page()
+
+        content_page.goto(
             component_url,
-            headers=headers,
-            timeout=120
+            wait_until="networkidle",
+            timeout=120000
         )
 
-        print("COMPONENT STATUS:", component_res.status_code)
+        content_body = content_page.locator("body").inner_text()
 
         isi_artikel = ""
 
-        if component_res.status_code == 200:
+        try:
 
-            try:
+            component_json = json.loads(content_body)
 
-                component_json = component_res.json()
+            rows = component_json.get("data", [])
 
-                rows = component_json.get("data", [])
+            print("COMPONENT:", len(rows))
 
-                print("COMPONENT TOTAL:", len(rows))
+            for row in rows:
 
-                for row in rows:
+                html = row.get("content", "")
 
-                    html = row.get("content", "")
+                if html:
 
-                    if html:
+                    soup = BeautifulSoup(html, "html.parser")
 
-                        soup = BeautifulSoup(html, "html.parser")
+                    text = soup.get_text("\n")
 
-                        text = soup.get_text("\n")
+                    text = re.sub(r"\n\s*\n", "\n\n", text)
 
-                        text = re.sub(r"\n\s*\n", "\n\n", text)
+                    isi_artikel += text.strip() + "\n\n"
 
-                        isi_artikel += text.strip() + "\n\n"
+        except Exception as e:
 
-            except Exception as e:
-                print("ERROR PARSE:", e)
+            print("ERROR PARSE:", e)
 
         # ==============================================
         # FALLBACK
@@ -209,6 +176,8 @@ Sumber resmi:
             f.write(markdown)
 
         print("SAVE:", filename)
+
+        content_page.close()
 
         time.sleep(3)
 
