@@ -111,3 +111,15 @@ def run():
 
 if __name__ == "__main__":
     run()
+
+index_path = "docs/index.md"
+
+with open(index_path, "w", encoding="utf-8") as f:
+    f.write("# Kliping Berita ATR/BPN\n\n")
+    f.write("## Daftar Berita\n\n")
+
+    for item in hasil[:10]:
+        slug = item["slug"]
+        judul = item["judul"]
+
+        f.write(f"- [{judul}](posts/{slug}.md)\n")
