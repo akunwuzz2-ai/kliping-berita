@@ -5,14 +5,14 @@ import re
 import time
 
 BASE = "https://www.atrbpn.go.id"
-URL = "https://www.atrbpn.go.id/berita"
-
-OUTPUT_DIR = "docs/posts"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+URL = BASE + "/berita"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
+
+OUTPUT_DIR = "docs/posts"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
 def slugify(text):
@@ -23,39 +23,59 @@ def slugify(text):
 
 def get_list():
     r = requests.get(URL, headers=HEADERS, timeout=30)
-    r.raise_for_status()
+
+    print("STATUS:", r.status_code)
 
     soup = BeautifulSoup(r.text, "html.parser")
 
     links = []
 
-    for a in soup.select("a.body-link[href^='/berita/']"):
-        href = a.get("href")
-        title = a.get_text(strip=True)
+    # 🔥 FIX: ambil semua a tag tanpa class filter
+    for a in soup.find_all("a", href=True):
 
-        if not href or not title:
+        href = a["href"]
+
+        if "/berita/" not in href:
             continue
 
-        full_url = BASE + href
+        title = a.get_text(" ", strip=True)
+
+        # filter noise
+        if len(title) < 10:
+            continue
+
+        full_url = BASE + href if href.startswith("/") else href
 
         links.append({
             "title": title,
             "url": full_url
         })
 
-    return links
+    # deduplicate
+    seen = set()
+    result = []
+
+    for x in links:
+        if x["url"] not in seen:
+            seen.add(x["url"])
+            result.append(x)
+
+    return result
 
 
 def scrape_detail(url):
     r = requests.get(url, headers=HEADERS, timeout=30)
-    r.raise_for_status()
-
     soup = BeautifulSoup(r.text, "html.parser")
 
     title = soup.title.get_text(strip=True) if soup.title else "no-title"
 
     paragraphs = soup.find_all("p")
-    content = "\n\n".join(p.get_text(" ", strip=True) for p in paragraphs if len(p.get_text()) > 40)
+
+    content = "\n\n".join(
+        p.get_text(" ", strip=True)
+        for p in paragraphs
+        if len(p.get_text(strip=True)) > 40
+    )
 
     return title, content
 
