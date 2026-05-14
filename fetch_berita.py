@@ -1,84 +1,63 @@
 from playwright.sync_api import sync_playwright
-from bs4 import BeautifulSoup
+import requests
 import os
 
 OUTPUT_DIR = "docs/posts"
 
-API_URL = (
+TOKEN = "VahmNYvhYD7a8P744r8bVIPTHeWzCJRm"
+
+LIST_URL = (
     "https://www.atrbpn.go.id/items/clipping_pages"
     "?filter=%7B%22_and%22:%5B%7B%22clipping%22:%7B%22_eq%22:%22a871228a-5532-4b97-b7c3-3d5922897d79%22%7D%7D,%7B%22_and%22:%5B%7B%22archived%22:%7B%22_eq%22:%22false%22%7D%7D,%7B%22status%22:%7B%22_eq%22:%22published%22%7D%7D%5D%7D%5D%7D"
-    "&fields=id,name,date_created,primary_image,slug"
+    "&fields=id,name,date_created,slug"
     "&sort=-date_created"
-    "&meta=filter_count"
     "&page=1"
     "&limit=12"
 )
 
-TOKEN = "VahmNYvhYD7a8P744r8bVIPTHeWzCJRm"
+HEADERS = {
+    "Authorization": f"Bearer {TOKEN}",
+    "Accept": "application/json",
+    "Referer": "https://www.atrbpn.go.id/berita",
+    "User-Agent": "Mozilla/5.0"
+}
 
 
-def ambil_isi_artikel(page, url):
+def ambil_detail(id_berita):
 
-    try:
+    url = f"https://www.atrbpn.go.id/items/clipping_pages/{id_berita}"
 
-        print("BUKA:", url)
+    r = requests.get(
+        url,
+        headers=HEADERS,
+        timeout=60
+    )
 
-        page.goto(
-            url,
-            wait_until="networkidle",
-            timeout=120000
-        )
+    print("DETAIL STATUS:", r.status_code)
 
-        # tunggu render JS
-        page.wait_for_timeout(5000)
-
-        html = page.content()
-
-        soup = BeautifulSoup(
-            html,
-            "lxml"
-        )
-
-        paragraphs = []
-
-        # ambil semua paragraf
-        for p in soup.select("p"):
-
-            text = p.get_text(
-                " ",
-                strip=True
-            )
-
-            # filter text kecil
-            if len(text) > 80:
-
-                low = text.lower()
-
-                # hindari footer/menu
-                if "copyright" in low:
-                    continue
-
-                if "kementerian agraria" in low:
-                    continue
-
-                if "atr/bpn" in low and len(text) < 120:
-                    continue
-
-                paragraphs.append(text)
-
-        print("PARAGRAF:", len(paragraphs))
-
-        isi = "\n\n".join(
-            paragraphs[:40]
-        )
-
-        return isi
-
-    except Exception as e:
-
-        print("GAGAL ARTIKEL:", e)
-
+    if r.status_code != 200:
         return ""
+
+    data = r.json().get("data", {})
+
+    # coba beberapa field isi
+    kemungkinan = [
+        "content",
+        "description",
+        "body",
+        "article",
+        "isi",
+        "news"
+    ]
+
+    for k in kemungkinan:
+
+        isi = data.get(k)
+
+        if isi and len(str(isi)) > 100:
+            return str(isi)
+
+    return str(data)
 
 
 def run():
@@ -88,135 +67,99 @@ def run():
         exist_ok=True
     )
 
-    with sync_playwright() as p:
+    print("AMBIL LIST BERITA")
 
-        browser = p.chromium.launch(
-            headless=True,
-            args=[
-                "--disable-blink-features=AutomationControlled"
-            ]
+    r = requests.get(
+        LIST_URL,
+        headers=HEADERS,
+        timeout=60
+    )
+
+    print("STATUS:", r.status_code)
+
+    if r.status_code != 200:
+        print(r.text)
+        return
+
+    data = r.json().get(
+        "data",
+        []
+    )
+
+    index = []
+
+    for item in data:
+
+        title = item["name"]
+
+        slug = item["slug"]
+
+        berita_id = item["id"]
+
+        tanggal = (
+            item["date_created"]
+            .split("T")[0]
         )
 
-        context = browser.new_context()
+        print("=" * 50)
+        print("SCRAPE:", title)
 
-        page = context.new_page()
-
-        print("Membuka homepage...")
-
-        page.goto(
-            "https://www.atrbpn.go.id",
-            wait_until="domcontentloaded",
-            timeout=120000
+        isi = ambil_detail(
+            berita_id
         )
 
-        print("Mengambil API...")
-
-        response = context.request.get(
-            API_URL,
-            headers={
-                "Authorization": f"Bearer {TOKEN}",
-                "Accept": "application/json",
-                "Referer": "https://www.atrbpn.go.id/berita"
-            }
+        article_url = (
+            "https://www.atrbpn.go.id/berita/"
+            + slug
         )
 
-        print("STATUS API:", response.status)
-
-        if response.status != 200:
-
-            print(response.text())
-
-            return
-
-        data = response.json().get(
-            "data",
-            []
+        filepath = os.path.join(
+            OUTPUT_DIR,
+            f"{slug}.md"
         )
 
-        print("TOTAL BERITA:", len(data))
-
-        homepage = []
-
-        for item in data:
-
-            title = item["name"]
-
-            slug = item["slug"]
-
-            tanggal = (
-                item["date_created"]
-                .split("T")[0]
-            )
-
-            article_url = (
-                "https://www.atrbpn.go.id/berita/"
-                + slug
-            )
-
-            print("=" * 50)
-            print("SCRAPE:", title)
-
-            isi_artikel = ambil_isi_artikel(
-                page,
-                article_url
-            )
-
-            if not isi_artikel:
-                isi_artikel = (
-                    "Isi artikel gagal diambil otomatis."
-                )
-
-            filepath = os.path.join(
-                OUTPUT_DIR,
-                f"{slug}.md"
-            )
-
-            markdown = f"""---
+        markdown = f"""---
 title: "{title}"
 date: {tanggal}
 ---
 
 # {title}
 
-{isi_artikel}
+{isi}
 
 ---
 
-## Sumber Resmi
+Sumber resmi:
 
 {article_url}
 """
 
-            with open(
-                filepath,
-                "w",
-                encoding="utf-8"
-            ) as f:
-
-                f.write(markdown)
-
-            homepage.append(
-                f"- [{title}](posts/{slug}.md)"
-            )
-
-            print("SAVE:", slug)
-
         with open(
-            "docs/index.md",
+            filepath,
             "w",
             encoding="utf-8"
         ) as f:
 
-            f.write(
-                "# Kliping Berita ATR/BPN\n\n"
-            )
+            f.write(markdown)
 
-            for item in homepage:
-                f.write(item + "\n")
+        index.append(
+            f"- [{title}](posts/{slug}.md)"
+        )
 
-        browser.close()
+        print("SAVE:", slug)
 
-        print("SELESAI")
+    with open(
+        "docs/index.md",
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        f.write("# Kliping Berita ATR/BPN\n\n")
+
+        for x in index:
+            f.write(x + "\n")
+
+    print("SELESAI")
 
 
 if __name__ == "__main__":
