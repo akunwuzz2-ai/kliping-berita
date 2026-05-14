@@ -1,8 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
-import re
-import json
 import os
+import re
 
 URL = "https://www.atrbpn.go.id/berita"
 
@@ -16,8 +15,11 @@ def run():
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        )
+        ),
+        "Accept-Language": "id-ID,id;q=0.9,en;q=0.8"
     }
+
+    print("Mengambil halaman...")
 
     response = requests.get(
         URL,
@@ -29,7 +31,7 @@ def run():
 
     html = response.text
 
-    # debug
+    # simpan html debug
     with open(
         "debug.html",
         "w",
@@ -37,75 +39,103 @@ def run():
     ) as f:
         f.write(html)
 
-    # cari data hydration Nuxt/JSON
-    patterns = [
-        r'__NUXT__=(.*?);</script>',
-        r'window\.__NUXT__=(.*?);</script>',
-        r'<script id="__NUXT_DATA__".*?>(.*?)</script>'
-    ]
-
-    json_text = None
-
-    for pattern in patterns:
-
-        match = re.search(
-            pattern,
-            html,
-            re.DOTALL
-        )
-
-        if match:
-            json_text = match.group(1)
-            break
-
-    if not json_text:
-        print("Hydration JSON tidak ditemukan")
-        return
-
-    print("Hydration ditemukan")
-
-    # simpan debug json
+    # simpan sebagian text debug
     with open(
-        "debug.json",
+        "debug.txt",
         "w",
         encoding="utf-8"
     ) as f:
-        f.write(json_text)
+        f.write(html[:20000])
 
-    # brute force cari slug berita
-    slug_pattern = re.findall(
-        r'"slug":"(.*?)"',
-        json_text
+    soup = BeautifulSoup(
+        html,
+        "lxml"
     )
 
-    title_pattern = re.findall(
-        r'"name":"(.*?)"',
-        json_text
-    )
+    berita = []
 
-    print("Slug ditemukan:", len(slug_pattern))
-    print("Title ditemukan:", len(title_pattern))
+    # cari semua href berita
+    for a in soup.find_all("a", href=True):
+
+        href = a.get("href", "").strip()
+
+        if "/berita/" not in href:
+            continue
+
+        text = a.get_text(
+            strip=True
+        )
+
+        if len(text) < 10:
+            continue
+
+        if href.startswith("/"):
+            full_url = (
+                "https://www.atrbpn.go.id"
+                + href
+            )
+        else:
+            full_url = href
+
+        slug = (
+            href.rstrip("/")
+            .split("/")[-1]
+        )
+
+        berita.append({
+            "judul": text,
+            "slug": slug,
+            "url": full_url
+        })
+
+    # fallback regex kalau HTML kosong
+    if len(berita) == 0:
+
+        print("Fallback regex parsing...")
+
+        slugs = re.findall(
+            r'"slug":"(.*?)"',
+            html
+        )
+
+        names = re.findall(
+            r'"name":"(.*?)"',
+            html
+        )
+
+        total = min(
+            len(slugs),
+            len(names)
+        )
+
+        for i in range(total):
+
+            berita.append({
+                "judul": names[i],
+                "slug": slugs[i],
+                "url": (
+                    "https://www.atrbpn.go.id/berita/"
+                    + slugs[i]
+                )
+            })
+
+    print("TOTAL BERITA:", len(berita))
 
     homepage = []
 
-    total = min(
-        len(slug_pattern),
-        len(title_pattern),
-        10
-    )
+    used = set()
 
-    for i in range(total):
+    for item in berita[:12]:
 
-        slug = slug_pattern[i]
-        judul = (
-            title_pattern[i]
-            .replace('\\"', '"')
-        )
+        slug = item["slug"]
 
-        url = (
-            "https://www.atrbpn.go.id/berita/"
-            + slug
-        )
+        if slug in used:
+            continue
+
+        used.add(slug)
+
+        judul = item["judul"]
+        url = item["url"]
 
         filepath = os.path.join(
             OUTPUT_DIR,
@@ -135,6 +165,7 @@ date: 2026-05-15
 
         print("SAVE:", judul)
 
+    # homepage
     with open(
         "docs/index.md",
         "w",
@@ -143,8 +174,13 @@ date: 2026-05-15
 
         f.write("# Kliping Berita ATR/BPN\n\n")
 
-        for item in homepage:
-            f.write(item + "\n")
+        if len(homepage) == 0:
+            f.write(
+                "Belum ada berita ditemukan.\n"
+            )
+        else:
+            for item in homepage:
+                f.write(item + "\n")
 
     print("SELESAI")
 
