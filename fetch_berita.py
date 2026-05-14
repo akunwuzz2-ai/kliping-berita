@@ -1,238 +1,156 @@
 import requests
-from bs4 import BeautifulSoup
 import os
 import re
-import time
-
-OUTPUT_DIR = "docs/posts"
+from bs4 import BeautifulSoup
 
 TOKEN = "VahmNYvhYD7a8P744r8bVIPTHeWzCJRm"
 
-LIST_URL = (
+HEADERS = {
+    "Authorization": f"Bearer {TOKEN}",
+    "User-Agent": "Mozilla/5.0",
+    "Referer": "https://www.atrbpn.go.id/berita",
+    "Accept": "application/json, text/plain, */*"
+}
+
+API_BERITA = (
     "https://www.atrbpn.go.id/items/clipping_pages"
-    "?filter=%7B%22_and%22:%5B%7B%22clipping%22:%7B%22_eq%22:%22a871228a-5532-4b97-b7c3-3d5922897d79%22%7D%7D,%7B%22_and%22:%5B%7B%22archived%22:%7B%22_eq%22:%22false%22%7D%7D,%7B%22status%22:%7B%22_eq%22:%22published%22%7D%7D%5D%7D%5D%7D"
-    "&fields=id,name,date_created,slug"
+    "?filter=%7B%22_and%22:%5B%7B%22clipping%22:%7B%22_eq%22:"
+    "%22a871228a-5532-4b97-b7c3-3d5922897d79%22%7D%7D,%7B%22_and%22:"
+    "%5B%7B%22archived%22:%7B%22_eq%22:%22false%22%7D%7D,%7B%22status%22:"
+    "%7B%22_eq%22:%22published%22%7D%7D%5D%7D%5D%7D"
+    "&fields=*"
     "&sort=-date_created"
-    "&meta=filter_count"
     "&page=1"
     "&limit=12"
 )
 
-HEADERS = {
-    "Authorization": f"Bearer {TOKEN}",
-    "Accept": "application/json, text/plain, */*",
-    "Referer": "https://www.atrbpn.go.id/berita",
-    "Origin": "https://www.atrbpn.go.id",
-    "User-Agent": (
-        "Mozilla/5.0 "
-        "(Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 "
-        "(KHTML, like Gecko) "
-        "Chrome/148.0.0.0 Safari/537.36"
-    ),
-    "Cache-Control": "no-cache",
-    "Pragma": "no-cache"
-}
+folder = "docs/posts"
+os.makedirs(folder, exist_ok=True)
 
 
-def ambil_component_id(slug):
+def clean_html(html):
+    soup = BeautifulSoup(html, "html.parser")
 
+    text = soup.get_text("\n")
+
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text.strip()
+
+
+def get_component_id(slug):
     url = f"https://www.atrbpn.go.id/berita/{slug}"
 
-    r = requests.get(
-        url,
-        headers=HEADERS,
-        timeout=60
-    )
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=30)
 
-    print("DETAIL STATUS:", r.status_code)
+        html = r.text
 
-    html = r.text
+        # simpan debug
+        with open("debug_article.html", "w", encoding="utf-8") as f:
+            f.write(html)
 
-    with open(
-        "debug_detail.html",
-        "w",
-        encoding="utf-8"
-    ) as f:
-        f.write(html)
+        # cari UUID component
+        match = re.search(
+            r'page_menu_components\?filter\[id\]=([a-f0-9\-]{36})',
+            html
+        )
 
-    pola = r'page_menu_components\?filter\[id\]=([a-z0-9\-]+)'
+        if match:
+            return match.group(1)
 
-    hasil = re.findall(
-        pola,
-        html
-    )
-
-    if hasil:
-        return hasil[0]
+    except Exception as e:
+        print("GAGAL buka artikel:", e)
 
     return None
 
 
-def ambil_konten(component_id):
-
-    url = (
+def get_article_content(component_id):
+    api = (
         "https://www.atrbpn.go.id/items/page_menu_components"
         f"?filter[id]={component_id}"
         "&fields=components.id,components.code,content,setting,order"
     )
 
-    r = requests.get(
-        url,
-        headers=HEADERS,
-        timeout=60
-    )
+    try:
+        r = requests.get(api, headers=HEADERS, timeout=30)
 
-    print("CONTENT STATUS:", r.status_code)
+        if r.status_code != 200:
+            print("API component gagal:", r.status_code)
+            return ""
 
-    if r.status_code != 200:
-        print(r.text)
-        return ""
+        data = r.json().get("data", [])
 
-    data = r.json().get(
-        "data",
-        []
-    )
+        if not data:
+            return ""
 
-    if not data:
-        return ""
+        html = data[0].get("content", "")
 
-    html = data[0].get(
-        "content",
-        ""
-    )
+        return clean_html(html)
 
-    soup = BeautifulSoup(
-        html,
-        "lxml"
-    )
+    except Exception as e:
+        print("GAGAL ambil component:", e)
 
-    text = soup.get_text(
-        "\n",
-        strip=True
-    )
-
-    return text
+    return ""
 
 
 def run():
+    print("Mengambil berita...")
 
-    os.makedirs(
-        OUTPUT_DIR,
-        exist_ok=True
-    )
+    r = requests.get(API_BERITA, headers=HEADERS, timeout=30)
 
-    print("AMBIL LIST BERITA")
-
-    r = requests.get(
-        LIST_URL,
-        headers=HEADERS,
-        timeout=60
-    )
-
-    print("LIST STATUS:", r.status_code)
+    print("STATUS:", r.status_code)
 
     if r.status_code != 200:
         print(r.text)
         return
 
-    data = r.json().get(
-        "data",
-        []
-    )
+    data = r.json().get("data", [])
 
     print("TOTAL:", len(data))
 
-    index_lines = []
-
     for item in data:
 
-        try:
+        title = item.get("name")
+        slug = item.get("slug")
+        date = item.get("date_created", "")[:10]
 
-            title = item["name"]
+        print("=" * 60)
+        print("SCRAPE:", title)
 
-            slug = item["slug"]
+        component_id = get_component_id(slug)
 
-            tanggal = (
-                item["date_created"]
-                .split("T")[0]
-            )
+        print("COMPONENT:", component_id)
 
-            print("=" * 60)
-            print("SCRAPE:", title)
+        content = ""
 
-            component_id = ambil_component_id(
-                slug
-            )
+        if component_id:
+            content = get_article_content(component_id)
 
-            print("COMPONENT:", component_id)
+        if not content:
+            content = "Isi artikel gagal diambil."
 
-            isi = ""
+        filepath = os.path.join(folder, f"{slug}.md")
 
-            if component_id:
+        article_url = f"https://www.atrbpn.go.id/berita/{slug}"
 
-                isi = ambil_konten(
-                    component_id
-                )
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write("---\n")
+            f.write(f"title: {title}\n")
+            f.write(f"date: {date}\n")
+            f.write("---\n\n")
 
-            if not isi:
-                isi = "Isi artikel gagal diambil."
+            f.write(f"# {title}\n\n")
 
-            article_url = (
-                "https://www.atrbpn.go.id/berita/"
-                + slug
-            )
+            f.write(content)
 
-            markdown = f"""---
-title: "{title}"
-date: {tanggal}
----
+            f.write("\n\n---\n\n")
 
-# {title}
+            f.write("Sumber resmi:\n\n")
 
-{isi}
+            f.write(article_url)
 
----
-
-Sumber resmi:
-
-{article_url}
-"""
-
-            filepath = os.path.join(
-                OUTPUT_DIR,
-                f"{slug}.md"
-            )
-
-            with open(
-                filepath,
-                "w",
-                encoding="utf-8"
-            ) as f:
-                f.write(markdown)
-
-            index_lines.append(
-                f"- [{title}](posts/{slug}.md)"
-            )
-
-            print("SAVE:", slug)
-
-            time.sleep(3)
-
-        except Exception as e:
-
-            print("ERROR:", e)
-
-    with open(
-        "docs/index.md",
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        f.write("# Kliping Berita ATR/BPN\n\n")
-
-        for line in index_lines:
-            f.write(line + "\n")
+        print("SAVE:", slug)
 
     print("SELESAI")
 
