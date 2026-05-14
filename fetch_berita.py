@@ -1,60 +1,100 @@
 import requests
 import os
 
-API_URL = "https://www.atrbpn.go.id/items/clipping_pages"
+BASE_URL = "https://www.atrbpn.go.id"
 
 OUTPUT_DIR = "docs/posts"
 
-FILTER = '{"_and":[{"clipping":{"_eq":"a871228a-5532-4b97-b7c3-3d5922897d79"}},{"_and":[{"archived":{"_eq":"false"}},{"status":{"_eq":"published"}}]}]}'
 
+def get_token(session):
 
-def run():
-
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    url = (
+        f"{BASE_URL}/users"
+        "?filter[domain]=www.atrbpn.go.id"
+    )
 
     headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        ),
-        "Accept": "application/json",
-        "Referer": "https://www.atrbpn.go.id/berita",
-        "Origin": "https://www.atrbpn.go.id",
-        "X-Requested-With": "XMLHttpRequest"
+        "User-Agent": "Mozilla/5.0",
+        "Referer": f"{BASE_URL}/berita",
+        "Origin": BASE_URL,
+        "Accept": "application/json"
     }
 
+    r = session.get(
+        url,
+        headers=headers,
+        timeout=30
+    )
+
+    print("USER STATUS:", r.status_code)
+
+    if r.status_code != 200:
+        print(r.text)
+        return None
+
+    data = r.json()
+
+    token = (
+        data.get("data", {})
+        .get("token")
+    )
+
+    return token
+
+
+def fetch_berita(session, token):
+
+    url = f"{BASE_URL}/items/clipping_pages"
+
+    filter_query = (
+        '{"_and":[{"clipping":{"_eq":"a871228a-5532-4b97-b7c3-3d5922897d79"}},'
+        '{"_and":[{"archived":{"_eq":"false"}},'
+        '{"status":{"_eq":"published"}}]}]}'
+    )
+
     params = {
-        "filter": FILTER,
-        "fields": "id,name,date_created,primary_image,slug",
+        "filter": filter_query,
+        "fields": (
+            "id,name,date_created,"
+            "primary_image,slug"
+        ),
         "sort": "-date_created",
         "meta": "filter_count",
         "page": 1,
         "limit": 12
     }
 
-    print("Mengambil berita...")
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+        "Referer": f"{BASE_URL}/berita",
+        "Origin": BASE_URL,
+        "Authorization": f"Bearer {token}"
+    }
 
-    response = requests.get(
-        API_URL,
-        headers=headers,
+    r = session.get(
+        url,
         params=params,
+        headers=headers,
         timeout=30
     )
 
-    print("STATUS:", response.status_code)
+    print("BERITA STATUS:", r.status_code)
 
-    if response.status_code != 200:
-        print(response.text)
-        return
+    if r.status_code != 200:
+        print(r.text)
+        return []
 
-    json_data = response.json()
+    return r.json().get("data", [])
 
-    data = json_data.get("data", [])
 
-    print("TOTAL:", len(data))
+def save_markdown(items):
 
-    homepage_links = []
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    for item in data:
+    homepage = []
+
+    for item in items:
 
         judul = item.get("name")
         slug = item.get("slug")
@@ -67,9 +107,8 @@ def run():
         if not judul or not slug:
             continue
 
-        artikel_url = (
-            "https://www.atrbpn.go.id/berita/"
-            + slug
+        url = (
+            f"{BASE_URL}/berita/{slug}"
         )
 
         filepath = os.path.join(
@@ -77,7 +116,7 @@ def run():
             f"{slug}.md"
         )
 
-        markdown = f"""---
+        content = f"""---
 title: "{judul}"
 date: {tanggal}
 ---
@@ -86,7 +125,7 @@ date: {tanggal}
 
 Dipublikasikan: {tanggal}
 
-[Baca Artikel Resmi]({artikel_url})
+[Baca Artikel Resmi]({url})
 """
 
         with open(
@@ -94,15 +133,14 @@ Dipublikasikan: {tanggal}
             "w",
             encoding="utf-8"
         ) as f:
-            f.write(markdown)
+            f.write(content)
 
-        homepage_links.append(
+        homepage.append(
             f"- [{judul}](posts/{slug}.md)"
         )
 
         print("SAVE:", judul)
 
-    # generate homepage
     with open(
         "docs/index.md",
         "w",
@@ -110,10 +148,35 @@ Dipublikasikan: {tanggal}
     ) as f:
 
         f.write("# Kliping Berita ATR/BPN\n\n")
-        f.write("Update otomatis dari situs resmi.\n\n")
 
-        for link in homepage_links:
+        for link in homepage:
             f.write(link + "\n")
+
+
+def run():
+
+    session = requests.Session()
+
+    print("Mengambil token...")
+
+    token = get_token(session)
+
+    print("TOKEN:", token)
+
+    if not token:
+        print("Token gagal didapat")
+        return
+
+    print("Mengambil berita...")
+
+    berita = fetch_berita(
+        session,
+        token
+    )
+
+    print("TOTAL:", len(berita))
+
+    save_markdown(berita)
 
     print("SELESAI")
 
