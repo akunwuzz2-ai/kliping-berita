@@ -5,7 +5,7 @@ date: 2026-05-11
 
 # Bahas Transformasi Organisasi dan Tata Kerja, Kementerian ATR/BPN Rumuskan Cara Kerja Efektif Berbasis Kewilayahan
 
-{'id': '8129ae29-ac54-4f90-a665-10c6e6318cc4', 'status': 'published', 'user_created': 'a78479a2-e7c1-47cc-bec9-69149d6971b8', 'date_created': '2026-05-11T13:38:32.565Z', 'user_updated': 'a78479a2-e7c1-47cc-bec9-69149d6971b8', 'date_updated': '2026-05-11T13:38:55.004Z', 'clipping': 'a871228a-5532-4b97-b7c3-3d5922897d79', 'name': 'Bahas Transformasi Organisasi dan Tata Kerja, Kementerian ATR/BPN Rumuskan Cara Kerja Efektif Berbasis Kewilayahan', 'primary_image': 'e29c2bcc-73da-4fc8-b9d0-b8d87cd7a9a7', 'slug': 'bahas-transformasi-organisasi-dan-tata-kerja-kementerian-atrbpn-rumuskan-cara-kerja-efektif-berbasis-kewilayahan', 'description': '', 'social_media': [], 'is_show_header': True, 'website': '6eeb2704-51c3-47a9-a2ef-a5504b9bb658', 'isShowInList': True, 'tags': [], 'is_show_author': True, 'clipping_category': 'f61ee345-aba9-4111-ba5a-2b8cbd5e1719', 'archived': False, 'is_show_title': True, 'is_secure_page': False}
+Isi artikel gagal diambil.
 
 ---
 
