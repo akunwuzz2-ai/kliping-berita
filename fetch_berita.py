@@ -1,81 +1,113 @@
-import requests
+from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import os
+from urllib.parse import urljoin
+
+BASE_URL = "https://www.atrbpn.go.id"
+URL = BASE_URL + "/berita"
 
 def run():
-    url = "https://www.atrbpn.go.id/berita"
-
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
 
     folder = "docs/posts"
     os.makedirs(folder, exist_ok=True)
 
-    try:
-        response = requests.get(url, headers=headers, timeout=20)
+    with sync_playwright() as p:
 
-        print("STATUS:", response.status_code)
+        browser = p.chromium.launch(
+            headless=True
+        )
 
-        html = response.text
+        page = browser.new_page()
 
-        # DEBUG SIMPAN HTML
+        print("Membuka website...")
+
+        page.goto(
+            URL,
+            wait_until="networkidle",
+            timeout=60000
+        )
+
+        # tunggu render JS
+        page.wait_for_timeout(8000)
+
+        html = page.content()
+
+        # debug
         with open("debug.html", "w", encoding="utf-8") as f:
             f.write(html)
 
         soup = BeautifulSoup(html, "html.parser")
 
-        berita_links = []
+        links = soup.find_all("a", href=True)
 
-        # cari semua link berita
-        for a in soup.select("a[href]"):
-            href = a.get("href", "")
+        print("Total semua link:", len(links))
 
-            if "/berita/" in href:
-                judul = a.get_text(strip=True)
-
-                if len(judul) > 5:
-                    berita_links.append((judul, href))
-
-        print("Ditemukan:", len(berita_links))
-
+        hasil = []
         seen = set()
-        count = 0
 
-        for judul, href in berita_links:
+        for a in links:
 
-            if href in seen:
+            href = a.get("href", "").strip()
+
+            if not href:
                 continue
 
-            seen.add(href)
+            full_url = urljoin(BASE_URL, href)
 
-            slug = href.rstrip("/").split("/")[-1]
+            # filter berita
+            if "/berita/" not in full_url:
+                continue
 
-            if href.startswith("/"):
-                full_url = "https://www.atrbpn.go.id" + href
-            else:
-                full_url = href
+            judul = a.get_text(" ", strip=True)
 
-            filepath = os.path.join(folder, f"{slug}.md")
+            # fallback title
+            if not judul:
+                judul = a.get("title", "").strip()
+
+            if len(judul) < 5:
+                continue
+
+            slug = full_url.rstrip("/").split("/")[-1]
+
+            if slug in seen:
+                continue
+
+            seen.add(slug)
+
+            hasil.append({
+                "judul": judul,
+                "url": full_url,
+                "slug": slug
+            })
+
+        print("Ditemukan:", len(hasil))
+
+        count = 0
+
+        for item in hasil[:10]:
+
+            filepath = os.path.join(
+                folder,
+                f"{item['slug']}.md"
+            )
 
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write("---\n")
                 f.write("date: 2026-05-15\n")
                 f.write("---\n\n")
-                f.write(f"# {judul}\n\n")
-                f.write(f"[Baca Selengkapnya]({full_url})\n")
+                f.write(f"# {item['judul']}\n\n")
+                f.write(
+                    f"[Baca Selengkapnya]({item['url']})\n"
+                )
 
-            print("SAVE:", judul)
+            print("SAVE:", item["judul"])
 
             count += 1
 
-            if count >= 10:
-                break
-
         print("TOTAL:", count)
 
-    except Exception as e:
-        print("ERROR:", e)
+        browser.close()
+
 
 if __name__ == "__main__":
     run()
