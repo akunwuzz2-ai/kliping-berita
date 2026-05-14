@@ -3,9 +3,7 @@ site_url: https://akunwuzz2-ai.github.io/kliping-berita/
 
 theme:
   name: material
-  language: id
 
 plugins:
   - blog:
       blog_dir: posts
-      post_dir: posts
