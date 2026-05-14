@@ -1,6 +1,7 @@
 name: Deploy MkDocs
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -13,17 +14,25 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.10
+          python-version: "3.10"
 
-      - name: Install
+      - name: Install dependencies
         run: |
           pip install mkdocs mkdocs-material
+          pip install playwright beautifulsoup4
+          playwright install --with-deps chromium
 
-      - name: Deploy
+      - name: Run scraper
+        run: |
+          python fetch_berita.py
+
+      - name: Deploy GitHub Pages
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
