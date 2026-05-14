@@ -1,126 +1,176 @@
 import os
 import re
-import json
+import time
 import requests
-
 from bs4 import BeautifulSoup
 
-BASE_URL = "https://www.atrbpn.go.id"
-
-TOKEN = "VahmNYvhYD7a8P744r8bVIPTHeWzCJRm"
-
-HEADERS = {
-    "Authorization": f"Bearer {TOKEN}",
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json, text/plain, */*"
-}
+# ======================================================
+# CONFIG
+# ======================================================
 
 API_URL = "https://www.atrbpn.go.id/items/clipping_pages?filter=%7B%22_and%22:%5B%7B%22clipping%22:%7B%22_eq%22:%22a871228a-5532-4b97-b7c3-3d5922897d79%22%7D%7D,%7B%22_and%22:%5B%7B%22archived%22:%7B%22_eq%22:%22false%22%7D%7D,%7B%22status%22:%7B%22_eq%22:%22published%22%7D%7D%5D%7D%5D%7D&fields=id,name,date_created,primary_image,slug&sort=-date_created&meta=filter_count&page=1&limit=12"
 
-os.makedirs("docs/posts", exist_ok=True)
+POSTS_DIR = "docs/posts"
+
+os.makedirs(POSTS_DIR, exist_ok=True)
+
+# ======================================================
+# SESSION + HEADERS
+# ======================================================
+
+session = requests.Session()
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json, text/plain, */*",
+    "Referer": "https://www.atrbpn.go.id/berita",
+    "Connection": "keep-alive",
+}
+
+# ======================================================
+# FUNCTION REQUEST DENGAN RETRY
+# ======================================================
+
+def safe_get(url, headers=None, retries=5):
+    for i in range(retries):
+        try:
+            res = session.get(
+                url,
+                headers=headers,
+                timeout=60
+            )
+
+            print(f"GET {url}")
+            print("STATUS:", res.status_code)
+
+            if res.status_code == 200:
+                return res
+
+        except Exception as e:
+            print("ERROR:", e)
+
+        wait = (i + 1) * 5
+        print(f"Retry {wait} detik...")
+        time.sleep(wait)
+
+    return None
+
+# ======================================================
+# AMBIL LIST BERITA
+# ======================================================
 
 print("Mengambil berita...")
 
-res = requests.get(API_URL, headers=HEADERS)
+res = safe_get(API_URL, HEADERS)
 
-print("STATUS:", res.status_code)
+if not res:
+    raise Exception("Gagal ambil API berita")
 
-data = res.json()["data"]
+data = res.json().get("data", [])
 
 print("TOTAL:", len(data))
 
+# ======================================================
+# LOOP BERITA
+# ======================================================
+
 for item in data:
 
-    title = item["name"]
-    slug = item["slug"]
-    date = item["date_created"][:10]
-
     print("=" * 60)
+
+    title = item.get("name", "Tanpa Judul")
+    slug = item.get("slug", "")
+    date = item.get("date_created", "")[:10]
+    berita_id = item.get("id")
+
     print("SCRAPE:", title)
+    print("ID:", berita_id)
 
-    article_url = f"{BASE_URL}/berita/{slug}"
+    # ==================================================
+    # API KONTEN
+    # ==================================================
 
-    try:
-        html = requests.get(article_url, headers=HEADERS).text
-
-    except Exception as e:
-        print("GAGAL BUKA HTML:", e)
-        continue
-
-    # simpan debug
-    with open("debug.html", "w", encoding="utf-8") as f:
-        f.write(html)
-
-    # cari UUID component/page_menu
-    match = re.search(
-        r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}',
-        html
+    content_url = (
+        "https://www.atrbpn.go.id/items/page_menu_components"
+        f"?filter[id]={berita_id}"
+        "&fields=components.id,components.code,content,setting,order"
     )
 
-    component_id = None
+    content_res = safe_get(content_url, HEADERS)
 
-    if match:
-        component_id = match.group(0)
+    isi_artikel = ""
 
-    print("COMPONENT:", component_id)
-
-    content_text = "Isi artikel gagal diambil."
-
-    if component_id:
-
-        component_url = (
-            "https://www.atrbpn.go.id/items/page_menu_components"
-            f"?filter[id]={component_id}"
-            "&fields=components.id,components.code,content,setting,order"
-        )
+    if content_res:
 
         try:
+            json_data = content_res.json()
 
-            comp_res = requests.get(component_url, headers=HEADERS)
+            rows = json_data.get("data", [])
 
-            print("COMP STATUS:", comp_res.status_code)
+            print("COMPONENT TOTAL:", len(rows))
 
-            comp_json = comp_res.json()
+            for row in rows:
 
-            with open("debug_component.json", "w", encoding="utf-8") as f:
-                json.dump(comp_json, f, indent=2, ensure_ascii=False)
+                html_content = row.get("content", "")
 
-            comp_data = comp_json.get("data", [])
+                if html_content:
 
-            if len(comp_data) > 0:
+                    soup = BeautifulSoup(html_content, "html.parser")
 
-                html_content = comp_data[0].get("content", "")
+                    text = soup.get_text("\n")
 
-                soup = BeautifulSoup(html_content, "html.parser")
+                    text = re.sub(r"\n\s*\n", "\n\n", text)
 
-                content_text = soup.get_text("\n")
-
-                content_text = re.sub(r'\n+', '\n\n', content_text)
+                    isi_artikel += text.strip() + "\n\n"
 
         except Exception as e:
-            print("GAGAL COMPONENT:", e)
+            print("GAGAL PARSE:", e)
 
-    md = f"""---
+    # ==================================================
+    # FALLBACK
+    # ==================================================
+
+    if not isi_artikel.strip():
+        isi_artikel = "Isi artikel gagal diambil."
+
+    # ==================================================
+    # LINK BERITA
+    # ==================================================
+
+    berita_url = f"https://www.atrbpn.go.id/berita/{slug}"
+
+    # ==================================================
+    # FORMAT MARKDOWN
+    # ==================================================
+
+    markdown = f"""---
 title: "{title}"
 date: {date}
 ---
 
 # {title}
 
-{content_text}
+{isi_artikel}
 
 ---
 
 Sumber resmi:
 
-{article_url}
+{berita_url}
 """
 
-    filename = f"docs/posts/{slug}.md"
+    # ==================================================
+    # SAVE FILE
+    # ==================================================
+
+    filename = os.path.join(POSTS_DIR, f"{slug}.md")
 
     with open(filename, "w", encoding="utf-8") as f:
-        f.write(md)
+        f.write(markdown)
 
     print("SAVE:", slug)
+
+    # delay biar tidak diblok server
+    time.sleep(3)
 
 print("SELESAI")
