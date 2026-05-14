@@ -1,4 +1,6 @@
 site_name: Kliping Berita ATRBPN
-
 theme:
   name: material
+
+nav:
+  - Home: index.md
