@@ -1,9 +1,23 @@
-site_name: Kliping Berita ATR/BPN
-site_url: https://akunwuzz2-ai.github.io/kliping-berita/
+name: Scrape ATRBPN
 
-theme:
-  name: material
+on:
+  workflow_dispatch:
 
-plugins:
-  - blog:
-      blog_dir: posts
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install playwright beautifulsoup4
+          playwright install --with-deps chromium
+
+      - name: Run scraper
+        run: python fetch_berita.py
