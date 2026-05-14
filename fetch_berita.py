@@ -1,13 +1,12 @@
 import requests
+import re
 import os
 import time
-import re
 from bs4 import BeautifulSoup
 
 BASE = "https://www.atrbpn.go.id"
 
-LIST_API = f"{BASE}/items/clipping_pages"
-
+BERITA_PAGE = f"{BASE}/berita"
 DETAIL_API = f"{BASE}/items/page_menu_components"
 
 OUTPUT_DIR = "docs/posts"
@@ -15,7 +14,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json",
+    "Accept": "application/json, text/plain, */*",
     "Referer": BASE
 }
 
@@ -32,21 +31,29 @@ def slugify(text):
 
 
 # =========================================================
-# 1. ambil list berita
+# 1. ambil HTML halaman berita (SPA)
 # =========================================================
-def get_list(page=1):
-    url = f"{LIST_API}?page={page}&limit=12&sort=-date_created"
-
-    r = session.get(url, headers=HEADERS, timeout=30)
+def fetch_berita_html():
+    r = session.get(BERITA_PAGE, headers=HEADERS, timeout=30)
     r.raise_for_status()
-
-    return r.json()
+    return r.text
 
 
 # =========================================================
-# 2. ambil detail (pakai ID → API page_menu_components)
+# 2. extract UUID dari HTML (INI KUNCI FIX)
 # =========================================================
-def get_detail(content_id):
+def extract_ids(html):
+    # UUID pattern
+    ids = re.findall(r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}", html)
+
+    # unique
+    return list(set(ids))
+
+
+# =========================================================
+# 3. ambil detail berita
+# =========================================================
+def fetch_detail(content_id):
     url = f"{DETAIL_API}?filter[id]={content_id}&fields=components.id,components.code,content,setting,order"
 
     r = session.get(url, headers=HEADERS, timeout=30)
@@ -58,41 +65,50 @@ def get_detail(content_id):
 
 
 # =========================================================
-# 3. extract text dari HTML
+# 4. convert HTML → text
 # =========================================================
-def extract(html):
+def html_to_text(html):
     soup = BeautifulSoup(html, "html.parser")
     return soup.get_text("\n", strip=True)
 
 
 # =========================================================
-# 4. main
+# MAIN
 # =========================================================
-list_data = get_list()
+print("Ambil halaman berita...")
 
-items = list_data["data"]
+html = fetch_berita_html()
 
-print("TOTAL LIST:", len(items))
+ids = extract_ids(html)
 
-for item in items:
+print("TOTAL ID ditemukan:", len(ids))
+
+if not ids:
+    raise Exception("Tidak menemukan ID di halaman /berita (struktur berubah)")
+
+# batasi biar aman di GitHub Actions
+ids = ids[:12]
+
+
+for cid in ids:
 
     try:
         print("=" * 60)
-        print("SCRAPE:", item["name"])
+        print("SCRAPE ID:", cid)
 
-        detail = get_detail(item["id"])
+        item = fetch_detail(cid)
 
-        html = detail["content"]
+        content_html = item["content"]
 
-        text = extract(html)
+        text = html_to_text(content_html)
 
-        title = item["name"]
+        title = BeautifulSoup(content_html, "html.parser").get_text(" ", strip=True)[:120]
 
         slug = slugify(title)
 
         md = f"""---
 title: "{title}"
-date: "{item['date_created'][:10]}"
+date: "{time.strftime('%Y-%m-%d')}"
 ---
 
 # {title}
@@ -100,7 +116,7 @@ date: "{item['date_created'][:10]}"
 {text}
 
 Source:
-{BASE}/berita/{item['slug']}
+{BASE}
 """
 
         path = f"{OUTPUT_DIR}/{slug}.md"
