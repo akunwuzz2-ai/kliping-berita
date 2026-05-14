@@ -1,125 +1,122 @@
-from playwright.sync_api import sync_playwright
-from bs4 import BeautifulSoup
+import requests
 import os
-from urllib.parse import urljoin
 
-BASE_URL = "https://www.atrbpn.go.id"
-URL = BASE_URL + "/berita"
+API_URL = "https://www.atrbpn.go.id/items/clipping_pages"
+
+OUTPUT_DIR = "docs/posts"
+
+FILTER = '{"_and":[{"clipping":{"_eq":"a871228a-5532-4b97-b7c3-3d5922897d79"}},{"_and":[{"archived":{"_eq":"false"}},{"status":{"_eq":"published"}}]}]}'
+
 
 def run():
 
-    folder = "docs/posts"
-    os.makedirs(folder, exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    with sync_playwright() as p:
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        ),
+        "Accept": "application/json",
+        "Referer": "https://www.atrbpn.go.id/berita",
+        "Origin": "https://www.atrbpn.go.id",
+        "X-Requested-With": "XMLHttpRequest"
+    }
 
-        browser = p.chromium.launch(
-            headless=True
+    params = {
+        "filter": FILTER,
+        "fields": "id,name,date_created,primary_image,slug",
+        "sort": "-date_created",
+        "meta": "filter_count",
+        "page": 1,
+        "limit": 12
+    }
+
+    print("Mengambil berita...")
+
+    response = requests.get(
+        API_URL,
+        headers=headers,
+        params=params,
+        timeout=30
+    )
+
+    print("STATUS:", response.status_code)
+
+    if response.status_code != 200:
+        print(response.text)
+        return
+
+    json_data = response.json()
+
+    data = json_data.get("data", [])
+
+    print("TOTAL:", len(data))
+
+    homepage_links = []
+
+    for item in data:
+
+        judul = item.get("name")
+        slug = item.get("slug")
+
+        tanggal = (
+            item.get("date_created", "")
+            .split("T")[0]
         )
 
-        page = browser.new_page()
+        if not judul or not slug:
+            continue
 
-        print("Membuka website...")
-
-        page.goto(
-            URL,
-            wait_until="networkidle",
-            timeout=60000
+        artikel_url = (
+            "https://www.atrbpn.go.id/berita/"
+            + slug
         )
 
-        # tunggu render JS
-        page.wait_for_timeout(8000)
+        filepath = os.path.join(
+            OUTPUT_DIR,
+            f"{slug}.md"
+        )
 
-        html = page.content()
+        markdown = f"""---
+title: "{judul}"
+date: {tanggal}
+---
 
-        # debug
-        with open("debug.html", "w", encoding="utf-8") as f:
-            f.write(html)
+# {judul}
 
-        soup = BeautifulSoup(html, "html.parser")
+Dipublikasikan: {tanggal}
 
-        links = soup.find_all("a", href=True)
+[Baca Artikel Resmi]({artikel_url})
+"""
 
-        print("Total semua link:", len(links))
+        with open(
+            filepath,
+            "w",
+            encoding="utf-8"
+        ) as f:
+            f.write(markdown)
 
-        hasil = []
-        seen = set()
+        homepage_links.append(
+            f"- [{judul}](posts/{slug}.md)"
+        )
 
-        for a in links:
+        print("SAVE:", judul)
 
-            href = a.get("href", "").strip()
+    # generate homepage
+    with open(
+        "docs/index.md",
+        "w",
+        encoding="utf-8"
+    ) as f:
 
-            if not href:
-                continue
+        f.write("# Kliping Berita ATR/BPN\n\n")
+        f.write("Update otomatis dari situs resmi.\n\n")
 
-            full_url = urljoin(BASE_URL, href)
+        for link in homepage_links:
+            f.write(link + "\n")
 
-            # filter berita
-            if "/berita/" not in full_url:
-                continue
-
-            judul = a.get_text(" ", strip=True)
-
-            # fallback title
-            if not judul:
-                judul = a.get("title", "").strip()
-
-            if len(judul) < 5:
-                continue
-
-            slug = full_url.rstrip("/").split("/")[-1]
-
-            if slug in seen:
-                continue
-
-            seen.add(slug)
-
-            hasil.append({
-                "judul": judul,
-                "url": full_url,
-                "slug": slug
-            })
-
-        print("Ditemukan:", len(hasil))
-
-        count = 0
-
-        for item in hasil[:10]:
-
-            filepath = os.path.join(
-                folder,
-                f"{item['slug']}.md"
-            )
-
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write("---\n")
-                f.write("date: 2026-05-15\n")
-                f.write("---\n\n")
-                f.write(f"# {item['judul']}\n\n")
-                f.write(
-                    f"[Baca Selengkapnya]({item['url']})\n"
-                )
-
-            print("SAVE:", item["judul"])
-
-            count += 1
-
-        print("TOTAL:", count)
-
-        browser.close()
+    print("SELESAI")
 
 
 if __name__ == "__main__":
     run()
-
-index_path = "docs/index.md"
-
-with open(index_path, "w", encoding="utf-8") as f:
-    f.write("# Kliping Berita ATR/BPN\n\n")
-    f.write("## Daftar Berita\n\n")
-
-    for item in hasil[:10]:
-        slug = item["slug"]
-        judul = item["judul"]
-
-        f.write(f"- [{judul}](posts/{slug}.md)\n")
