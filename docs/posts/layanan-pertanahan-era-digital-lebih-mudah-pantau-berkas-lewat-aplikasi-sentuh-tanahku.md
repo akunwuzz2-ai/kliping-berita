@@ -5,10 +5,10 @@ date: 2026-05-11
 
 # Layanan Pertanahan Era Digital, Lebih Mudah Pantau Berkas Lewat Aplikasi Sentuh Tanahku
 
-
+Isi artikel gagal diambil otomatis.
 
 ---
 
-Sumber resmi:
+## Sumber Resmi
 
 https://www.atrbpn.go.id/berita/layanan-pertanahan-era-digital-lebih-mudah-pantau-berkas-lewat-aplikasi-sentuh-tanahku
