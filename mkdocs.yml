@@ -1,0 +1,7 @@
+site_name: Kliping Berita ATR/BPN
+theme:
+  name: material
+  language: id
+plugins:
+  - blog:
+      blog_dir: posts
