@@ -2,9 +2,7 @@ site_name: Kliping Berita ATR/BPN
 site_url: https://akunwuzz2-ai.github.io/kliping-berita/
 
 theme:
-  - name: Install Dependencies
-        run: |
-          pip install requests beautifulsoup4
+  name: material
 
 plugins:
   - blog:
