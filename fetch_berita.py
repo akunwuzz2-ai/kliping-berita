@@ -1,188 +1,143 @@
-import requests
-from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
+import json
 import os
-import re
-
-URL = "https://www.atrbpn.go.id/berita"
 
 OUTPUT_DIR = "docs/posts"
+
+API_URL = (
+    "https://www.atrbpn.go.id/items/clipping_pages"
+    "?filter=%7B%22_and%22:%5B%7B%22clipping%22:%7B%22_eq%22:%22a871228a-5532-4b97-b7c3-3d5922897d79%22%7D%7D,%7B%22_and%22:%5B%7B%22archived%22:%7B%22_eq%22:%22false%22%7D%7D,%7B%22status%22:%7B%22_eq%22:%22published%22%7D%7D%5D%7D%5D%7D"
+    "&fields=id,name,date_created,primary_image,slug"
+    "&sort=-date_created"
+    "&meta=filter_count"
+    "&page=1"
+    "&limit=12"
+)
+
+TOKEN = "VahmNYvhYD7a8P744r8bVIPTHeWzCJRm"
 
 
 def run():
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        ),
-        "Accept-Language": "id-ID,id;q=0.9,en;q=0.8"
-    }
-
-    print("Mengambil halaman...")
-
-    response = requests.get(
-        URL,
-        headers=headers,
-        timeout=30
+    os.makedirs(
+        OUTPUT_DIR,
+        exist_ok=True
     )
 
-    print("STATUS:", response.status_code)
+    with sync_playwright() as p:
 
-    html = response.text
-
-    # simpan html debug
-    with open(
-        "debug.html",
-        "w",
-        encoding="utf-8"
-    ) as f:
-        f.write(html)
-
-    # simpan sebagian text debug
-    with open(
-        "debug.txt",
-        "w",
-        encoding="utf-8"
-    ) as f:
-        f.write(html[:20000])
-
-    soup = BeautifulSoup(
-        html,
-        "lxml"
-    )
-
-    berita = []
-
-    # cari semua href berita
-    for a in soup.find_all("a", href=True):
-
-        href = a.get("href", "").strip()
-
-        if "/berita/" not in href:
-            continue
-
-        text = a.get_text(
-            strip=True
+        browser = p.chromium.launch(
+            headless=True
         )
 
-        if len(text) < 10:
-            continue
+        context = browser.new_context()
 
-        if href.startswith("/"):
-            full_url = (
-                "https://www.atrbpn.go.id"
-                + href
+        page = context.new_page()
+
+        print("Buka homepage...")
+
+        # buka homepage dulu agar dapat cookie
+        page.goto(
+            "https://www.atrbpn.go.id",
+            wait_until="domcontentloaded",
+            timeout=120000
+        )
+
+        print("Ambil API...")
+
+        response = context.request.get(
+            API_URL,
+            headers={
+                "Authorization": f"Bearer {TOKEN}",
+                "Accept": "application/json",
+                "Referer": "https://www.atrbpn.go.id/berita"
+            }
+        )
+
+        print("STATUS:", response.status)
+
+        text = response.text()
+
+        with open(
+            "debug.json",
+            "w",
+            encoding="utf-8"
+        ) as f:
+            f.write(text)
+
+        if response.status != 200:
+            print(text)
+            return
+
+        data = response.json().get(
+            "data",
+            []
+        )
+
+        print("TOTAL:", len(data))
+
+        homepage = []
+
+        for item in data:
+
+            title = item["name"]
+            slug = item["slug"]
+
+            tanggal = (
+                item["date_created"]
+                .split("T")[0]
             )
-        else:
-            full_url = href
 
-        slug = (
-            href.rstrip("/")
-            .split("/")[-1]
-        )
+            url = (
+                "https://www.atrbpn.go.id/berita/"
+                + slug
+            )
 
-        berita.append({
-            "judul": text,
-            "slug": slug,
-            "url": full_url
-        })
+            filepath = os.path.join(
+                OUTPUT_DIR,
+                f"{slug}.md"
+            )
 
-    # fallback regex kalau HTML kosong
-    if len(berita) == 0:
-
-        print("Fallback regex parsing...")
-
-        slugs = re.findall(
-            r'"slug":"(.*?)"',
-            html
-        )
-
-        names = re.findall(
-            r'"name":"(.*?)"',
-            html
-        )
-
-        total = min(
-            len(slugs),
-            len(names)
-        )
-
-        for i in range(total):
-
-            berita.append({
-                "judul": names[i],
-                "slug": slugs[i],
-                "url": (
-                    "https://www.atrbpn.go.id/berita/"
-                    + slugs[i]
-                )
-            })
-
-    print("TOTAL BERITA:", len(berita))
-
-    homepage = []
-
-    used = set()
-
-    for item in berita[:12]:
-
-        slug = item["slug"]
-
-        if slug in used:
-            continue
-
-        used.add(slug)
-
-        judul = item["judul"]
-        url = item["url"]
-
-        filepath = os.path.join(
-            OUTPUT_DIR,
-            f"{slug}.md"
-        )
-
-        markdown = f"""---
-title: "{judul}"
-date: 2026-05-15
+            markdown = f"""---
+title: "{title}"
+date: {tanggal}
 ---
 
-# {judul}
+# {title}
 
 [Baca Artikel Resmi]({url})
 """
 
+            with open(
+                filepath,
+                "w",
+                encoding="utf-8"
+            ) as f:
+
+                f.write(markdown)
+
+            homepage.append(
+                f"- [{title}](posts/{slug}.md)"
+            )
+
+            print("SAVE:", title)
+
         with open(
-            filepath,
+            "docs/index.md",
             "w",
             encoding="utf-8"
         ) as f:
-            f.write(markdown)
 
-        homepage.append(
-            f"- [{judul}](posts/{slug}.md)"
-        )
-
-        print("SAVE:", judul)
-
-    # homepage
-    with open(
-        "docs/index.md",
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        f.write("# Kliping Berita ATR/BPN\n\n")
-
-        if len(homepage) == 0:
             f.write(
-                "Belum ada berita ditemukan.\n"
+                "# Kliping Berita ATR/BPN\n\n"
             )
-        else:
+
             for item in homepage:
                 f.write(item + "\n")
 
-    print("SELESAI")
+        browser.close()
+
+        print("SELESAI")
 
 
 if __name__ == "__main__":
