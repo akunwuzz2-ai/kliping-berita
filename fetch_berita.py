@@ -1,134 +1,99 @@
 import requests
-import re
 import os
 import time
+import re
 from bs4 import BeautifulSoup
 
 BASE = "https://www.atrbpn.go.id"
 
-BERITA_PAGE = f"{BASE}/berita"
-DETAIL_API = f"{BASE}/items/page_menu_components"
+API = f"{BASE}/items/page_menu_components"
 
 OUTPUT_DIR = "docs/posts"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json, text/plain, */*",
+    "Accept": "application/json",
     "Referer": BASE
 }
 
 session = requests.Session()
 
 
-# =========================================================
-# slug
-# =========================================================
 def slugify(text):
     text = text.lower()
     text = re.sub(r"[^a-z0-9]+", "-", text)
     return text.strip("-")
 
 
-# =========================================================
-# 1. ambil HTML halaman berita (SPA)
-# =========================================================
-def fetch_berita_html():
-    r = session.get(BERITA_PAGE, headers=HEADERS, timeout=30)
-    r.raise_for_status()
-    return r.text
+def extract_text(html):
+    return BeautifulSoup(html, "html.parser").get_text("\n", strip=True)
 
 
-# =========================================================
-# 2. extract UUID dari HTML (INI KUNCI FIX)
-# =========================================================
-def extract_ids(html):
-    # UUID pattern
-    ids = re.findall(r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}", html)
-
-    # unique
-    return list(set(ids))
-
-
-# =========================================================
-# 3. ambil detail berita
-# =========================================================
-def fetch_detail(content_id):
-    url = f"{DETAIL_API}?filter[id]={content_id}&fields=components.id,components.code,content,setting,order"
-
+def get_page(page=1):
+    url = f"{API}?page={page}&limit=10&fields=components.id,components.code,content,setting,order"
     r = session.get(url, headers=HEADERS, timeout=30)
+
+    print("PAGE", page, "STATUS:", r.status_code)
+
     r.raise_for_status()
-
-    data = r.json()
-
-    return data["data"][0]
+    return r.json()
 
 
-# =========================================================
-# 4. convert HTML → text
-# =========================================================
-def html_to_text(html):
-    soup = BeautifulSoup(html, "html.parser")
-    return soup.get_text("\n", strip=True)
+page = 1
+total_saved = 0
 
+while True:
 
-# =========================================================
-# MAIN
-# =========================================================
-print("Ambil halaman berita...")
+    data = get_page(page)
 
-html = fetch_berita_html()
+    items = data.get("data", [])
 
-ids = extract_ids(html)
+    if not items:
+        break
 
-print("TOTAL ID ditemukan:", len(ids))
+    for item in items:
 
-if not ids:
-    raise Exception("Tidak menemukan ID di halaman /berita (struktur berubah)")
+        try:
+            content = item.get("content", "")
 
-# batasi biar aman di GitHub Actions
-ids = ids[:12]
+            if not content:
+                continue
 
+            text = extract_text(content)
 
-for cid in ids:
+            # ambil judul dari paragraf pertama
+            soup = BeautifulSoup(content, "html.parser")
+            title = soup.get_text(" ", strip=True)[:120]
 
-    try:
-        print("=" * 60)
-        print("SCRAPE ID:", cid)
+            slug = slugify(title)
 
-        item = fetch_detail(cid)
-
-        content_html = item["content"]
-
-        text = html_to_text(content_html)
-
-        title = BeautifulSoup(content_html, "html.parser").get_text(" ", strip=True)[:120]
-
-        slug = slugify(title)
-
-        md = f"""---
+            md = f"""---
 title: "{title}"
-date: "{time.strftime('%Y-%m-%d')}"
+date: "2026-05-15"
 ---
 
 # {title}
 
 {text}
-
-Source:
-{BASE}
 """
 
-        path = f"{OUTPUT_DIR}/{slug}.md"
+            path = f"{OUTPUT_DIR}/{slug}.md"
 
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(md)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
 
-        print("SAVE:", slug)
+            print("SAVE:", slug)
+            total_saved += 1
 
-        time.sleep(1.5)
+        except Exception as e:
+            print("ERROR:", repr(e))
 
-    except Exception as e:
-        print("ERROR:", repr(e))
+    page += 1
+    time.sleep(1)
 
+    if page > 20:  # safety limit GitHub Actions
+        break
+
+print("TOTAL SAVED:", total_saved)
 print("SELESAI")
