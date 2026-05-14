@@ -24,6 +24,8 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install playwright
+          pip install beautifulsoup4
+          pip install lxml
           pip install mkdocs
           pip install mkdocs-material
 
@@ -32,12 +34,6 @@ jobs:
       - name: Run Scraper
         run: |
           python fetch_berita.py
-
-      - name: Upload Debug Files
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-files
-          path: debug.json
 
       - name: Commit Files
         run: |
