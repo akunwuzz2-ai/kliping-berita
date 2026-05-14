@@ -20,6 +20,8 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install requests beautifulsoup4 mkdocs-material
+          pip install playwright beautifulsoup4
+          playwright install chromium
 
       - name: Fetch Latest News
         run: |
