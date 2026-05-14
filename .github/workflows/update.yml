@@ -23,11 +23,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests
-          pip install beautifulsoup4
-          pip install lxml
-          pip install mkdocs
-          pip install mkdocs-material
+            pip install requests
+            pip install beautifulsoup4
+            pip install lxml
+            pip install urllib3
+            pip install mkdocs
+            pip install mkdocs-material
 
       - name: Run scraper
         run: |
