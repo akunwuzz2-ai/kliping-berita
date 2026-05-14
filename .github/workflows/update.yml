@@ -1,33 +1,29 @@
-name: Auto Update Clipping
+name: Deploy MkDocs
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 0 * * *'
+  push:
+    branches:
+      - main
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: 3.10
 
-      - name: Install Dependencies
+      - name: Install
         run: |
-          pip install requests beautifulsoup4 mkdocs-material
-          pip install playwright beautifulsoup4
-          playwright install chromium
+          pip install mkdocs mkdocs-material
 
-      - name: Fetch Latest News
-        run: |
-          python fetch_berita.py
-
-      - name: Deploy to GitHub Pages
+      - name: Deploy
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
