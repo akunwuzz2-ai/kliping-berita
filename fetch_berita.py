@@ -1,5 +1,5 @@
 from playwright.sync_api import sync_playwright
-import json
+from bs4 import BeautifulSoup
 import os
 
 OUTPUT_DIR = "docs/posts"
@@ -15,6 +15,48 @@ API_URL = (
 )
 
 TOKEN = "VahmNYvhYD7a8P744r8bVIPTHeWzCJRm"
+
+
+def ambil_isi_artikel(page, url):
+
+    try:
+
+        page.goto(
+            url,
+            wait_until="domcontentloaded",
+            timeout=120000
+        )
+
+        html = page.content()
+
+        soup = BeautifulSoup(
+            html,
+            "lxml"
+        )
+
+        paragraphs = []
+
+        for p in soup.find_all("p"):
+
+            text = p.get_text(
+                " ",
+                strip=True
+            )
+
+            if len(text) > 40:
+                paragraphs.append(text)
+
+        isi = "\n\n".join(
+            paragraphs[:30]
+        )
+
+        return isi
+
+    except Exception as e:
+
+        print("GAGAL ARTIKEL:", e)
+
+        return ""
 
 
 def run():
@@ -34,16 +76,14 @@ def run():
 
         page = context.new_page()
 
-        print("Buka homepage...")
+        print("Membuka homepage...")
 
-        # buka homepage dulu agar dapat cookie
         page.goto(
             "https://www.atrbpn.go.id",
-            wait_until="domcontentloaded",
-            timeout=120000
+            wait_until="domcontentloaded"
         )
 
-        print("Ambil API...")
+        print("Mengambil API...")
 
         response = context.request.get(
             API_URL,
@@ -56,17 +96,8 @@ def run():
 
         print("STATUS:", response.status)
 
-        text = response.text()
-
-        with open(
-            "debug.json",
-            "w",
-            encoding="utf-8"
-        ) as f:
-            f.write(text)
-
         if response.status != 200:
-            print(text)
+            print(response.text())
             return
 
         data = response.json().get(
@@ -74,13 +105,12 @@ def run():
             []
         )
 
-        print("TOTAL:", len(data))
-
         homepage = []
 
         for item in data:
 
             title = item["name"]
+
             slug = item["slug"]
 
             tanggal = (
@@ -88,9 +118,16 @@ def run():
                 .split("T")[0]
             )
 
-            url = (
+            article_url = (
                 "https://www.atrbpn.go.id/berita/"
                 + slug
+            )
+
+            print("SCRAPE:", title)
+
+            isi_artikel = ambil_isi_artikel(
+                page,
+                article_url
             )
 
             filepath = os.path.join(
@@ -105,7 +142,13 @@ date: {tanggal}
 
 # {title}
 
-[Baca Artikel Resmi]({url})
+{isi_artikel}
+
+---
+
+Sumber resmi:
+
+{article_url}
 """
 
             with open(
@@ -120,7 +163,7 @@ date: {tanggal}
                 f"- [{title}](posts/{slug}.md)"
             )
 
-            print("SAVE:", title)
+            print("SAVE:", slug)
 
         with open(
             "docs/index.md",
