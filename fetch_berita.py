@@ -9,7 +9,7 @@ def run():
     }
 
     if not os.path.exists("docs/posts"):
-        os.makedirs("docs/posts")
+        os.makedirs("docs/posts", exist_ok=True)
 
     response = requests.get(api_url, headers=headers)
     if response.status_code == 200:
