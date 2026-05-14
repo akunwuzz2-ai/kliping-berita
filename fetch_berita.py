@@ -1,47 +1,58 @@
 import requests
-from bs4 import BeautifulSoup
 import os
 
 def run():
-    target_url = "https://www.atrbpn.go.id/berita"
+    # Jalur API publik untuk mendapatkan daftar berita
+    # Kita ambil judul (name), slug, dan tanggal (date_created)
+    api_url = "https://www.atrbpn.go.id/items/clipping_pages?fields=name,slug,date_created&sort=-date_created&limit=10"
+    
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": "https://www.atrbpn.go.id/berita"
     }
 
     folder_tujuan = "docs/posts"
     os.makedirs(folder_tujuan, exist_ok=True)
 
-    print("Sedang memindai halaman berita ATR/BPN...")
-    response = requests.get(target_url, headers=headers)
-    
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.text, 'html.parser')
-        # Taktik baru: cari semua link yang mengandung kata '/berita/'
-        links = soup.find_all('a', href=True)
-        
-        count = 0
-        for link in links:
-            href = link['href']
-            if "/berita/" in href and len(href) > 10:
-                slug = href.split('/')[-1]
-                judul = link.get_text(strip=True)
-                
-                if not judul or len(judul) < 5: continue
+    print("Mengambil data berita melalui jalur API...")
 
-                link_asli = f"https://www.atrbpn.go.id{href}" if href.startswith('/') else href
-                file_path = os.path.join(folder_tujuan, f"{slug}.md")
+    try:
+        response = requests.get(api_url, headers=headers, timeout=20)
+        print("STATUS:", response.status_code)
+
+        if response.status_code == 200:
+            data_berita = response.json().get('data', [])
+            count = 0
+
+            for berita in data_berita:
+                judul = berita.get('name')
+                slug = berita.get('slug')
+                # Format tanggal: YYYY-MM-DD
+                tanggal = berita.get('date_created', '2026-05-15').split('T')[0]
                 
+                if not judul or not slug:
+                    continue
+
+                full_url = f"https://www.atrbpn.go.id/berita/{slug}"
+                file_path = os.path.join(folder_tujuan, f"{slug}.md")
+
                 with open(file_path, "w", encoding="utf-8") as f:
-                    f.write("---\ndate: 2026-05-15\n---\n\n")
+                    f.write("---\n")
+                    f.write(f"date: {tanggal}\n")
+                    f.write("---\n\n")
                     f.write(f"# {judul}\n\n")
-                    f.write(f"Kliping berita ATR/BPN.\n\n")
-                    f.write(f"Baca selengkapnya: [Klik di Sini]({link_asli})\n")
+                    f.write(f"Dipublikasikan pada: {tanggal}\n\n")
+                    f.write(f"Sumber resmi ATR/BPN: [Baca Selengkapnya]({full_url})\n")
+
+                print(f"SAVE: {judul}")
                 count += 1
-                if count >= 10: break # Ambil 10 saja
-        
-        print(f"Berhasil! {count} kliping berita telah dibuat.")
-    else:
-        print(f"Gagal. Status: {response.status_code}")
+
+            print(f"Total berita tersimpan: {count}")
+        else:
+            print(f"Gagal mengambil data. Pesan: {response.text[:200]}")
+
+    except Exception as e:
+        print("ERROR:", e)
 
 if __name__ == "__main__":
     run()
