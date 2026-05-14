@@ -2,10 +2,10 @@ import os
 import re
 import time
 import requests
-
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from urllib.parse import urljoin, urlparse
 
 BASE_URL = "https://www.atrbpn.go.id"
 BERITA_URL = "https://www.atrbpn.go.id/berita"
@@ -20,11 +20,8 @@ HEADERS = {
         "Chrome/124.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
-    "Accept": "text/html,application/xhtml+xml",
-    "Connection": "keep-alive"
 }
 
-# session retry
 session = requests.Session()
 
 retry = Retry(
@@ -45,98 +42,119 @@ def slugify(text):
     return text.strip('-')
 
 
+def normalize_url(url):
+    return urljoin(BASE_URL, url)
+
+
 print("Mengambil halaman berita...")
 
-try:
+res = session.get(BERITA_URL, headers=HEADERS, timeout=60)
 
-    res = session.get(
-        BERITA_URL,
-        headers=HEADERS,
-        timeout=60
-    )
+print("STATUS:", res.status_code)
 
-    print("STATUS:", res.status_code)
-
-    if res.status_code != 200:
-        raise Exception("Gagal buka halaman berita")
-
-except Exception as e:
-    raise Exception(f"Gagal koneksi: {str(e)}")
+# DEBUG kalau kosong / kena JS render
+if len(res.text) < 1000:
+    raise Exception("HTML terlalu kecil, kemungkinan diblok atau JS-rendered")
 
 soup = BeautifulSoup(res.text, "html.parser")
 
-links = soup.find_all("a", href=True)
+# =========================================================
+# 1. Coba ambil artikel dari struktur modern (lebih akurat)
+# =========================================================
+articles = soup.select("article a[href]")
 
 berita = []
 
-for a in links:
+for a in articles:
+    href = a.get("href", "")
+    title = a.get_text(" ", strip=True)
 
-    href = a["href"]
-
-    if "/berita/" not in href:
+    if "berita" not in href:
         continue
 
-    title = a.get_text(strip=True)
-
-    if len(title) < 15:
+    if len(title) < 10:
         continue
-
-    url = href
-
-    if not url.startswith("http"):
-        url = BASE_URL + href
 
     berita.append({
         "title": title,
-        "url": url
+        "url": normalize_url(href)
     })
 
-# hapus duplikat
+
+# =========================================================
+# 2. Fallback kalau article kosong
+# =========================================================
+if not berita:
+    print("Fallback parsing semua link...")
+
+    links = soup.find_all("a", href=True)
+
+    for a in links:
+        href = a["href"]
+        title = a.get_text(" ", strip=True)
+
+        if "berita" not in href:
+            continue
+
+        if len(title) < 10:
+            continue
+
+        berita.append({
+            "title": title,
+            "url": normalize_url(href)
+        })
+
+
+# =========================================================
+# 3. Hapus duplikat
+# =========================================================
 seen = set()
-final_berita = []
+unique = []
 
 for item in berita:
-
     if item["url"] not in seen:
         seen.add(item["url"])
-        final_berita.append(item)
+        unique.append(item)
 
-berita = final_berita[:12]
+berita = unique[:12]
 
 print("TOTAL:", len(berita))
 
+if not berita:
+    print("HTML snippet:")
+    print(res.text[:1500])
+    raise Exception("Tidak menemukan berita - kemungkinan struktur website berubah")
+
+
+# =========================================================
+# 4. Scrape detail artikel
+# =========================================================
 for item in berita:
 
     try:
-
         print("=" * 60)
         print("SCRAPE:", item["title"])
 
-        res = session.get(
-            item["url"],
-            headers=HEADERS,
-            timeout=60
-        )
-
-        print("DETAIL STATUS:", res.status_code)
+        res = session.get(item["url"], headers=HEADERS, timeout=60)
 
         soup = BeautifulSoup(res.text, "html.parser")
 
-        paragraphs = soup.find_all("p")
+        # ambil artikel utama dulu
+        container = soup.find("article") or soup
+
+        paragraphs = container.find_all("p")
 
         isi_list = []
 
         for p in paragraphs:
-
             txt = p.get_text(" ", strip=True)
-
             if len(txt) > 40:
                 isi_list.append(txt)
 
         isi = "\n\n".join(isi_list)
 
         if not isi:
-            isi = "Isi artikel gagal diambil."
+            isi = "Isi artikel tidak ditemukan (struktur berubah)."
 
         slug = slugify(item["title"])
 
@@ -161,10 +179,10 @@ Sumber resmi:
 
         print("SAVE:", slug)
 
-        time.sleep(2)
+        time.sleep(2 + time.random() * 2 if hasattr(time, "random") else 2)
 
     except Exception as e:
+        print("ERROR:", repr(e))
 
-        print("ERROR:", str(e))
 
 print("SELESAI")
