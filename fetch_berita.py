@@ -1,238 +1,126 @@
-import requests
 import os
-import json
 import re
+import json
+import requests
+
 from bs4 import BeautifulSoup
 
-# =========================
-# TOKEN
-# =========================
+BASE_URL = "https://www.atrbpn.go.id"
+
 TOKEN = "VahmNYvhYD7a8P744r8bVIPTHeWzCJRm"
 
-# =========================
-# HEADERS
-# =========================
 HEADERS = {
     "Authorization": f"Bearer {TOKEN}",
     "User-Agent": "Mozilla/5.0",
-    "Referer": "https://www.atrbpn.go.id/berita",
     "Accept": "application/json, text/plain, */*"
 }
 
-# =========================
-# API BERITA
-# =========================
-API_BERITA = (
-    "https://www.atrbpn.go.id/items/clipping_pages"
-    "?filter=%7B%22_and%22:%5B%7B%22clipping%22:%7B%22_eq%22:"
-    "%22a871228a-5532-4b97-b7c3-3d5922897d79%22%7D%7D,%7B%22_and%22:"
-    "%5B%7B%22archived%22:%7B%22_eq%22:%22false%22%7D%7D,%7B%22status%22:"
-    "%7B%22_eq%22:%22published%22%7D%7D%5D%7D%5D%7D"
-    "&fields=*.*.*"
-    "&sort=-date_created"
-    "&page=1"
-    "&limit=12"
-)
+API_URL = "https://www.atrbpn.go.id/items/clipping_pages?filter=%7B%22_and%22:%5B%7B%22clipping%22:%7B%22_eq%22:%22a871228a-5532-4b97-b7c3-3d5922897d79%22%7D%7D,%7B%22_and%22:%5B%7B%22archived%22:%7B%22_eq%22:%22false%22%7D%7D,%7B%22status%22:%7B%22_eq%22:%22published%22%7D%7D%5D%7D%5D%7D&fields=id,name,date_created,primary_image,slug&sort=-date_created&meta=filter_count&page=1&limit=12"
 
-# =========================
-# FOLDER OUTPUT
-# =========================
-folder = "docs/posts"
-os.makedirs(folder, exist_ok=True)
+os.makedirs("docs/posts", exist_ok=True)
 
-# =========================
-# CLEAN HTML
-# =========================
-def clean_html(html):
+print("Mengambil berita...")
 
-    soup = BeautifulSoup(html, "html.parser")
+res = requests.get(API_URL, headers=HEADERS)
 
-    text = soup.get_text("\n")
+print("STATUS:", res.status_code)
 
-    text = re.sub(r"\n{3,}", "\n\n", text)
+data = res.json()["data"]
 
-    return text.strip()
+print("TOTAL:", len(data))
 
-# =========================
-# AMBIL CONTENT COMPONENT
-# =========================
-def get_component_content(component_id):
+for item in data:
 
-    api = (
-        "https://www.atrbpn.go.id/items/page_menu_components"
-        f"?filter[id]={component_id}"
-        "&fields=components.id,components.code,content,setting,order"
-    )
+    title = item["name"]
+    slug = item["slug"]
+    date = item["date_created"][:10]
+
+    print("=" * 60)
+    print("SCRAPE:", title)
+
+    article_url = f"{BASE_URL}/berita/{slug}"
 
     try:
-
-        r = requests.get(api, headers=HEADERS, timeout=30)
-
-        print("COMPONENT STATUS:", r.status_code)
-
-        if r.status_code != 200:
-            return ""
-
-        result = r.json()
-
-        data = result.get("data", [])
-
-        if not data:
-            return ""
-
-        html = data[0].get("content", "")
-
-        return clean_html(html)
+        html = requests.get(article_url, headers=HEADERS).text
 
     except Exception as e:
+        print("GAGAL BUKA HTML:", e)
+        continue
 
-        print("ERROR COMPONENT:", e)
+    # simpan debug
+    with open("debug.html", "w", encoding="utf-8") as f:
+        f.write(html)
 
-    return ""
+    # cari UUID component/page_menu
+    match = re.search(
+        r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}',
+        html
+    )
 
-# =========================
-# CARI UUID COMPONENT
-# =========================
-def find_component_id(obj):
+    component_id = None
 
-    if isinstance(obj, dict):
+    if match:
+        component_id = match.group(0)
 
-        for k, v in obj.items():
+    print("COMPONENT:", component_id)
 
-            # cari key yg mengandung component
-            if "component" in k.lower():
+    content_text = "Isi artikel gagal diambil."
 
-                if isinstance(v, list):
+    if component_id:
 
-                    for item in v:
+        component_url = (
+            "https://www.atrbpn.go.id/items/page_menu_components"
+            f"?filter[id]={component_id}"
+            "&fields=components.id,components.code,content,setting,order"
+        )
 
-                        if isinstance(item, dict):
+        try:
 
-                            component_id = item.get("id")
+            comp_res = requests.get(component_url, headers=HEADERS)
 
-                            if component_id:
-                                return component_id
+            print("COMP STATUS:", comp_res.status_code)
 
-                elif isinstance(v, dict):
+            comp_json = comp_res.json()
 
-                    component_id = v.get("id")
+            with open("debug_component.json", "w", encoding="utf-8") as f:
+                json.dump(comp_json, f, indent=2, ensure_ascii=False)
 
-                    if component_id:
-                        return component_id
+            comp_data = comp_json.get("data", [])
 
-            result = find_component_id(v)
+            if len(comp_data) > 0:
 
-            if result:
-                return result
+                html_content = comp_data[0].get("content", "")
 
-    elif isinstance(obj, list):
+                soup = BeautifulSoup(html_content, "html.parser")
 
-        for item in obj:
+                content_text = soup.get_text("\n")
 
-            result = find_component_id(item)
+                content_text = re.sub(r'\n+', '\n\n', content_text)
 
-            if result:
-                return result
+        except Exception as e:
+            print("GAGAL COMPONENT:", e)
 
-    return None
+    md = f"""---
+title: "{title}"
+date: {date}
+---
 
-# =========================
-# MAIN
-# =========================
-def run():
+# {title}
 
-    print("Mengambil berita...")
+{content_text}
 
-    r = requests.get(API_BERITA, headers=HEADERS, timeout=30)
+---
 
-    print("STATUS:", r.status_code)
+Sumber resmi:
 
-    if r.status_code != 200:
-        print(r.text)
-        return
+{article_url}
+"""
 
-    result = r.json()
+    filename = f"docs/posts/{slug}.md"
 
-    data = result.get("data", [])
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(md)
 
-    print("TOTAL:", len(data))
+    print("SAVE:", slug)
 
-    # DEBUG FULL JSON
-    with open("full.json", "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-    # LOOP BERITA
-    for item in data:
-
-        title = item.get("name", "Tanpa Judul")
-
-        slug = item.get("slug", "tanpa-slug")
-
-        date = item.get("date_created", "")[:10]
-
-        print("=" * 60)
-
-        print("SCRAPE:", title)
-
-        # =========================
-        # CARI COMPONENT ID
-        # =========================
-        component_id = find_component_id(item)
-
-        print("COMPONENT:", component_id)
-
-        content = ""
-
-        if component_id:
-
-            content = get_component_content(component_id)
-
-        if not content:
-
-            content = "Isi artikel gagal diambil."
-
-        # =========================
-        # URL ARTIKEL
-        # =========================
-        article_url = f"https://www.atrbpn.go.id/berita/{slug}"
-
-        # =========================
-        # FILEPATH
-        # =========================
-        filepath = os.path.join(folder, f"{slug}.md")
-
-        # =========================
-        # SAVE MARKDOWN
-        # =========================
-        with open(filepath, "w", encoding="utf-8") as f:
-
-            f.write("---\n")
-
-            f.write(f"title: {title}\n")
-
-            f.write(f"date: {date}\n")
-
-            f.write("---\n\n")
-
-            f.write(f"# {title}\n\n")
-
-            f.write(content)
-
-            f.write("\n\n---\n\n")
-
-            f.write("Sumber resmi:\n\n")
-
-            f.write(article_url)
-
-            f.write("\n")
-
-        print("SAVE:", slug)
-
-    print("SELESAI")
-
-
-# =========================
-# RUN
-# =========================
-if __name__ == "__main__":
-    run()
+print("SELESAI")
