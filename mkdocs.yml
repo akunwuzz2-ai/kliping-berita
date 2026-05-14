@@ -1,7 +1,4 @@
-site_name: ATRBPN Clipping
-
-site_description: Kliping berita otomatis ATR/BPN
-site_author: Github Actions
+site_name: Kliping Berita ATRBPN
 
 theme:
   name: material
