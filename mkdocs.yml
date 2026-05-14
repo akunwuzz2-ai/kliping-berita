@@ -8,5 +8,4 @@ theme:
 plugins:
   - blog:
       blog_dir: posts
-      post_dir: docs/posts
-      archive: true
+      post_dir: posts
