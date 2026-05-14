@@ -1,23 +1,18 @@
 import requests
-import os
-import time
-import re
 from bs4 import BeautifulSoup
+import os
+import re
+import time
 
 BASE = "https://www.atrbpn.go.id"
-
-API = f"{BASE}/items/page_menu_components"
+URL = "https://www.atrbpn.go.id/berita"
 
 OUTPUT_DIR = "docs/posts"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json",
-    "Referer": BASE
+    "User-Agent": "Mozilla/5.0"
 }
-
-session = requests.Session()
 
 
 def slugify(text):
@@ -26,74 +21,79 @@ def slugify(text):
     return text.strip("-")
 
 
-def extract_text(html):
-    return BeautifulSoup(html, "html.parser").get_text("\n", strip=True)
-
-
-def get_page(page=1):
-    url = f"{API}?page={page}&limit=10&fields=components.id,components.code,content,setting,order"
-    r = session.get(url, headers=HEADERS, timeout=30)
-
-    print("PAGE", page, "STATUS:", r.status_code)
-
+def get_list():
+    r = requests.get(URL, headers=HEADERS, timeout=30)
     r.raise_for_status()
-    return r.json()
+
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    links = []
+
+    for a in soup.select("a.body-link[href^='/berita/']"):
+        href = a.get("href")
+        title = a.get_text(strip=True)
+
+        if not href or not title:
+            continue
+
+        full_url = BASE + href
+
+        links.append({
+            "title": title,
+            "url": full_url
+        })
+
+    return links
 
 
-page = 1
-total_saved = 0
+def scrape_detail(url):
+    r = requests.get(url, headers=HEADERS, timeout=30)
+    r.raise_for_status()
 
-while True:
+    soup = BeautifulSoup(r.text, "html.parser")
 
-    data = get_page(page)
+    title = soup.title.get_text(strip=True) if soup.title else "no-title"
 
-    items = data.get("data", [])
+    paragraphs = soup.find_all("p")
+    content = "\n\n".join(p.get_text(" ", strip=True) for p in paragraphs if len(p.get_text()) > 40)
 
-    if not items:
-        break
+    return title, content
 
-    for item in items:
 
-        try:
-            content = item.get("content", "")
+print("Ambil list berita...")
 
-            if not content:
-                continue
+items = get_list()
 
-            text = extract_text(content)
+print("TOTAL:", len(items))
 
-            # ambil judul dari paragraf pertama
-            soup = BeautifulSoup(content, "html.parser")
-            title = soup.get_text(" ", strip=True)[:120]
+for item in items[:12]:
 
-            slug = slugify(title)
+    try:
+        print("SCRAPE:", item["title"])
 
-            md = f"""---
-title: "{title}"
+        title, content = scrape_detail(item["url"])
+
+        slug = slugify(title)
+
+        md = f"""---
+title: "{item['title']}"
 date: "2026-05-15"
 ---
 
-# {title}
+# {item['title']}
 
-{text}
+{content}
+
+Source:
+{item['url']}
 """
 
-            path = f"{OUTPUT_DIR}/{slug}.md"
+        with open(f"{OUTPUT_DIR}/{slug}.md", "w", encoding="utf-8") as f:
+            f.write(md)
 
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(md)
+        time.sleep(1)
 
-            print("SAVE:", slug)
-            total_saved += 1
+    except Exception as e:
+        print("ERROR:", repr(e))
 
-        except Exception as e:
-            print("ERROR:", repr(e))
-
-    page += 1
-    time.sleep(1)
-
-    if page > 20:  # safety limit GitHub Actions
-        break
-
-print("TOTAL SAVED:", total_saved)
 print("SELESAI")
