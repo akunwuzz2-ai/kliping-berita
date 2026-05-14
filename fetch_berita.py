@@ -21,11 +21,16 @@ def ambil_isi_artikel(page, url):
 
     try:
 
+        print("BUKA:", url)
+
         page.goto(
             url,
-            wait_until="domcontentloaded",
+            wait_until="networkidle",
             timeout=120000
         )
+
+        # tunggu render JS
+        page.wait_for_timeout(5000)
 
         html = page.content()
 
@@ -36,18 +41,35 @@ def ambil_isi_artikel(page, url):
 
         paragraphs = []
 
-        for p in soup.find_all("p"):
+        # ambil semua paragraf
+        for p in soup.select("p"):
 
             text = p.get_text(
                 " ",
                 strip=True
             )
 
-            if len(text) > 40:
+            # filter text kecil
+            if len(text) > 80:
+
+                low = text.lower()
+
+                # hindari footer/menu
+                if "copyright" in low:
+                    continue
+
+                if "kementerian agraria" in low:
+                    continue
+
+                if "atr/bpn" in low and len(text) < 120:
+                    continue
+
                 paragraphs.append(text)
 
+        print("PARAGRAF:", len(paragraphs))
+
         isi = "\n\n".join(
-            paragraphs[:30]
+            paragraphs[:40]
         )
 
         return isi
@@ -69,7 +91,10 @@ def run():
     with sync_playwright() as p:
 
         browser = p.chromium.launch(
-            headless=True
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled"
+            ]
         )
 
         context = browser.new_context()
@@ -80,7 +105,8 @@ def run():
 
         page.goto(
             "https://www.atrbpn.go.id",
-            wait_until="domcontentloaded"
+            wait_until="domcontentloaded",
+            timeout=120000
         )
 
         print("Mengambil API...")
@@ -94,16 +120,20 @@ def run():
             }
         )
 
-        print("STATUS:", response.status)
+        print("STATUS API:", response.status)
 
         if response.status != 200:
+
             print(response.text())
+
             return
 
         data = response.json().get(
             "data",
             []
         )
+
+        print("TOTAL BERITA:", len(data))
 
         homepage = []
 
@@ -123,12 +153,18 @@ def run():
                 + slug
             )
 
+            print("=" * 50)
             print("SCRAPE:", title)
 
             isi_artikel = ambil_isi_artikel(
                 page,
                 article_url
             )
+
+            if not isi_artikel:
+                isi_artikel = (
+                    "Isi artikel gagal diambil otomatis."
+                )
 
             filepath = os.path.join(
                 OUTPUT_DIR,
@@ -146,7 +182,7 @@ date: {tanggal}
 
 ---
 
-Sumber resmi:
+## Sumber Resmi
 
 {article_url}
 """
