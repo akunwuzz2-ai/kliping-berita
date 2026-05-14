@@ -1,5 +1,5 @@
 ---
-title: "Banyak Membantu, Warga Minta BPN Sediakan Layanan Lebih Banyak Lagi di PELATARAN"
+title: Banyak Membantu, Warga Minta BPN Sediakan Layanan Lebih Banyak Lagi di PELATARAN
 date: 2026-05-09
 ---
 

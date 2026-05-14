@@ -1,5 +1,5 @@
 ---
-title: "Layanan Pertanahan Era Digital, Lebih Mudah Pantau Berkas Lewat Aplikasi Sentuh Tanahku"
+title: Layanan Pertanahan Era Digital, Lebih Mudah Pantau Berkas Lewat Aplikasi Sentuh Tanahku
 date: 2026-05-11
 ---
 

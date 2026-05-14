@@ -1,5 +1,5 @@
 ---
-title: "Tawarkan Sembilan Program Kerja Sama dengan KPK, Sahli ATR/BPN Ungkap Keuntungan bagi Pemerintah Daerah Se-Sulut"
+title: Tawarkan Sembilan Program Kerja Sama dengan KPK, Sahli ATR/BPN Ungkap Keuntungan bagi Pemerintah Daerah Se-Sulut
 date: 2026-05-12
 ---
 

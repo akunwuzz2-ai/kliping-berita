@@ -1,5 +1,5 @@
 ---
-title: "Rakor Bersama para Kepala Daerah di Kalsel, Menteri Nusron: Penentuan Lokasi LP2B Menjadi Kewenangan Daerah"
+title: Rakor Bersama para Kepala Daerah di Kalsel, Menteri Nusron: Penentuan Lokasi LP2B Menjadi Kewenangan Daerah
 date: 2026-05-14
 ---
 

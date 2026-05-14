@@ -1,5 +1,5 @@
 ---
-title: "Perdana Dirasakan Warga Kabupaten Tangerang, Urus Roya dan Waris Selesai dalam Lima Menit"
+title: Perdana Dirasakan Warga Kabupaten Tangerang, Urus Roya dan Waris Selesai dalam Lima Menit
 date: 2026-05-12
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Integrasi Sertipikat Elektronik dan Aplikasi Sentuh Tanahku Berikan Manfaat Lebih dalam Transaksi Pertanahan"
+title: Integrasi Sertipikat Elektronik dan Aplikasi Sentuh Tanahku Berikan Manfaat Lebih dalam Transaksi Pertanahan
 date: 2026-05-13
 ---
 

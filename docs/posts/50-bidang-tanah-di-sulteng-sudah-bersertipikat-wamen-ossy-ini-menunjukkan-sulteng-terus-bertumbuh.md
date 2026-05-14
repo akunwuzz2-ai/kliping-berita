@@ -1,5 +1,5 @@
 ---
-title: "50% Bidang Tanah di Sulteng Sudah Bersertipikat, Wamen Ossy: Ini Menunjukkan Sulteng Terus Bertumbuh"
+title: 50% Bidang Tanah di Sulteng Sudah Bersertipikat, Wamen Ossy: Ini Menunjukkan Sulteng Terus Bertumbuh
 date: 2026-05-10
 ---
 

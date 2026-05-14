@@ -1,5 +1,5 @@
 ---
-title: "Tandatangani Nota Kesepahaman dengan Pemerintah Provinsi Aceh, Sekjen ATR/BPN: Perkuat Tata Kelola Pertanahan"
+title: Tandatangani Nota Kesepahaman dengan Pemerintah Provinsi Aceh, Sekjen ATR/BPN: Perkuat Tata Kelola Pertanahan
 date: 2026-05-12
 ---
 

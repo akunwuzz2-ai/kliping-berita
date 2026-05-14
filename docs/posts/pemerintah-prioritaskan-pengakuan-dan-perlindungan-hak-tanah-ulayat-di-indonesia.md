@@ -1,5 +1,5 @@
 ---
-title: "Pemerintah Prioritaskan Pengakuan dan Perlindungan Hak Tanah Ulayat di Indonesia"
+title: Pemerintah Prioritaskan Pengakuan dan Perlindungan Hak Tanah Ulayat di Indonesia
 date: 2026-05-09
 ---
 

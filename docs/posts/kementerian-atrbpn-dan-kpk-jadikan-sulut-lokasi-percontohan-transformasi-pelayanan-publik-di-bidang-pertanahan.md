@@ -1,5 +1,5 @@
 ---
-title: "Kementerian ATR/BPN dan KPK Jadikan Sulut Lokasi Percontohan Transformasi Pelayanan Publik di Bidang Pertanahan"
+title: Kementerian ATR/BPN dan KPK Jadikan Sulut Lokasi Percontohan Transformasi Pelayanan Publik di Bidang Pertanahan
 date: 2026-05-12
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Bicara Soal Amanah Pimpinan dalam Pengajian di Pandeglang, Menteri Nusron: Permudah Rakyat"
+title: Bicara Soal Amanah Pimpinan dalam Pengajian di Pandeglang, Menteri Nusron: Permudah Rakyat
 date: 2026-05-09
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Bahas Transformasi Organisasi dan Tata Kerja, Kementerian ATR/BPN Rumuskan Cara Kerja Efektif Berbasis Kewilayahan"
+title: Bahas Transformasi Organisasi dan Tata Kerja, Kementerian ATR/BPN Rumuskan Cara Kerja Efektif Berbasis Kewilayahan
 date: 2026-05-11
 ---
 
