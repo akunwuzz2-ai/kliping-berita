@@ -117,3 +117,7 @@ Source:
         print("ERROR:", repr(e))
 
 print("SELESAI")
+
+print("HTML LENGTH:", len(r.text))
+print("HAS BERITA:", "/berita/" in r.text)
+print("SNAPSHOT:", r.text[:500])
